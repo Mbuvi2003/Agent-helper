@@ -1,0 +1,19 @@
+{
+  "app_name": "Agent Helper",
+  "version": "1.0.0",
+  "data_folder": "data",
+  "fuzzy_threshold": 70,
+  "use_rapidfuzz": true,
+  "window_width": 1400,
+  "window_height": 800,
+  "theme": "light",
+  "font_family": "Segoe UI",
+  "font_size_normal": 10,
+  "font_size_header": 12,
+  "show_recent_on_startup": true,
+  "auto_save_interval": 30,
+  "max_recent_items": 10,
+  "max_history_items": 100,
+  "hotkeys_enabled": true,
+  "copy_to_clipboard": true
+}

@@ -1,0 +1,179 @@
+{
+  "snippets": [
+    {
+      "snippet_code": "SIM_SWAP_PATIENT",
+      "trigger": "/simswap_patient",
+      "category": "SIM SWAP",
+      "keywords": ["sim swap", "patient", "inconvenience", "resolved"],
+      "text": "Jambo, your SIM swap is being resolved. We apologize for any inconvenience caused. Please be patient as we process your request."
+    },
+    {
+      "snippet_code": "SIM_SWAP_VETTING_FAILED",
+      "trigger": "/simswap_failed",
+      "category": "SIM SWAP",
+      "keywords": ["sim swap", "vetting failed", "failed", "visit rc"],
+      "text": "SIM swap vetting failed. Advised customer to visit the nearest Safaricom Retail Center with valid ID for further assistance."
+    },
+    {
+      "snippet_code": "SIM_SWAP_KYC_MISMATCH",
+      "trigger": "/simswap_kyc",
+      "category": "SIM SWAP",
+      "keywords": ["sim swap", "kyc mismatch", "mismatch", "visit rc"],
+      "text": "KYC mismatch detected. Advised customer to visit the nearest Safaricom Retail Center with correct ID details for SIM swap."
+    },
+    {
+      "snippet_code": "SIM_SWAP_NOT_ACTIVE",
+      "trigger": "/simswap_inactive",
+      "category": "SIM SWAP",
+      "keywords": ["sim swap", "not active", "inactive", "call back", "visit rc"],
+      "text": "Line not active. Advised customer to call from alternate line or visit nearest Safaricom Retail Center for replacement SIM."
+    },
+    {
+      "snippet_code": "REVERSAL_2HRS_SLA",
+      "trigger": "/reversal_2h",
+      "category": "REVERSAL",
+      "keywords": ["reversal", "2hrs", "sla", "hakikisha", "patient"],
+      "text": "Jambo, reversal initiated with 2-hour SLA. Educated customer on Hakikisha feature. Advised to be patient during processing."
+    },
+    {
+      "snippet_code": "REVERSAL_72HRS_SLA",
+      "trigger": "/reversal_72h",
+      "category": "REVERSAL",
+      "keywords": ["reversal", "72hrs", "sla", "hakikisha", "patient"],
+      "text": "Jambo, reversal initiated with 72-hour SLA. Educated customer on Hakikisha feature. Advised to be patient during processing."
+    },
+    {
+      "snippet_code": "REVERSAL_12HRS_SLA",
+      "trigger": "/reversal_12h",
+      "category": "REVERSAL",
+      "keywords": ["reversal", "12hrs", "sla", "hakikisha"],
+      "text": "Jambo, reversal initiated with 12-hour SLA. Educated customer on Hakikisha. Advised to wait for confirmation."
+    },
+    {
+      "snippet_code": "REVERSAL_HAKIKISHA",
+      "trigger": "/hakikisha",
+      "category": "REVERSAL",
+      "keywords": ["hakikisha", "confirm", "reversal", "mpesa"],
+      "text": "Jambo, sasa ni rahisi kuhakikisha kwamba pesa zako zinaenda kwa nambari sahihi na M-PESA. HAKIKISHA kwa kubonyeza 1 KUKAMILISHA au 2 KUSIMAMISHA kutuma pesa."
+    },
+    {
+      "snippet_code": "REVERSAL_SMS_456",
+      "trigger": "/reversal_sms",
+      "category": "REVERSAL",
+      "keywords": ["reversal", "sms", "456", "24hrs", "paybill"],
+      "text": "Jambo, to reverse forward the M-PESA message to 456 within 24 hours. Thank you. For PayBill reversal, send M-PESA message to SMS 456."
+    },
+    {
+      "snippet_code": "PIN_DIY_PROCEDURE",
+      "trigger": "/pin_diy",
+      "category": "PIN",
+      "keywords": ["pin", "mpesa", "diy", "start key", "set"],
+      "text": "Jambo, dial *334#>My Account>M-PESA PIN Manager>Set M-PESA Security Questions and answers>Enter ID/PP number>Set 3 Questions>Enter M-PESA PIN. Thank you."
+    },
+    {
+      "snippet_code": "PIN_RESET_PROCEDURE",
+      "trigger": "/pin_reset",
+      "category": "PIN",
+      "keywords": ["pin", "reset", "forgot", "diy", "security questions"],
+      "text": "Jambo, to reset PIN dial *334#>My Account>M-PESA PIN Manager>M-PESA Forgot PIN>Enter ID/PP number>Answer security questions provided to get PIN. Thank you."
+    },
+    {
+      "snippet_code": "PIN_SQ_SETUP",
+      "trigger": "/pin_sq",
+      "category": "PIN",
+      "keywords": ["security questions", "pin", "setup", "answers"],
+      "text": "To set up M-PESA security questions: Dial *334#>My Account>M-PESA PIN Manager>Set M-PESA Security Questions and answers>Follow prompts."
+    },
+    {
+      "snippet_code": "PIN_UNLOCK",
+      "trigger": "/pin_unlock",
+      "category": "PIN",
+      "keywords": ["unlock", "pin", "locked", "mpesa"],
+      "text": "Jambo, dial *334#>My account>Unlock M-PESA PIN>ID number>Wait for confirmation message. Thank you."
+    },
+    {
+      "snippet_code": "PIN_STATEMENT",
+      "trigger": "/pin_statement",
+      "category": "PIN",
+      "keywords": ["statement", "m-pesa", "email", "pdf"],
+      "text": "Dial *334#>Select My Account>Choose M-PESA Statement>Select Full Statement>Choose duration (1, 3, 6, or 12 months)>Enter your email. PDF received within minutes."
+    },
+    {
+      "snippet_code": "PUK_DIY_USSD",
+      "trigger": "/puk_ussd",
+      "category": "PUK",
+      "keywords": ["puk", "get puk", "blocked", "*100#"],
+      "text": "Jambo, kupata PUK ya line iliyofungika, bonyeza *456# ukitumia simu nyingine na kuchagua Get PUK Number na kufuata maagizo. Asante."
+    },
+    {
+      "snippet_code": "PUK_DIY_APP_LINK",
+      "trigger": "/puk_app",
+      "category": "PUK",
+      "keywords": ["puk", "app", "link", "safaricom app", "blocked"],
+      "text": "To get PUK for the blocked line, dial *100# from a different line, select Get PUK number or click https://safaricomapp.page.link/get-puk."
+    },
+    {
+      "snippet_code": "LOAN_BILLING_ADJUSTMENT",
+      "trigger": "/loan_billing",
+      "category": "LOANS",
+      "keywords": ["billing", "issue", "adjustment", "fuliza", "correction"],
+      "text": "We failed to bill you accurately for Fuliza taken earlier due to a system issue. An adjustment has been made to correct this. The billing is now accurate going forward. Sorry for the inconvenience."
+    },
+    {
+      "snippet_code": "LOAN_LIMIT_INCREASE_ADVICE",
+      "trigger": "/loan_limit",
+      "category": "LOANS",
+      "keywords": ["loan", "limit", "increase", "save", "transact"],
+      "text": "Sub advised to save, transact in and out of the loan account and continue using Safaricom services to increase loan limit over time."
+    },
+    {
+      "snippet_code": "POOLED_SR_RAISED",
+      "trigger": "/pooled",
+      "category": "LINE STATUS",
+      "keywords": ["pooled", "corporate", "sr raised", "72hrs"],
+      "text": "Service Request raised for pooled line recreation. SLA: 72 hours. Customer advised to be patient as request is processed."
+    },
+    {
+      "snippet_code": "BONGA_DIY_APP",
+      "trigger": "/bonga",
+      "category": "PIN",
+      "keywords": ["bonga", "reset", "service pin", "safaricom app"],
+      "text": "Note: M-PESA PIN and Service PIN are the same (Bonga PIN). Customer advised to reset Service PIN using Safaricom App."
+    },
+    {
+      "snippet_code": "VM_DIAL_132",
+      "trigger": "/vm",
+      "category": "GENERAL",
+      "keywords": ["voicemail", "vm", "pin", "132", "change"],
+      "text": "To reset voicemail PIN: Sub advised to dial 132 and follow prompts to change the PIN."
+    },
+    {
+      "snippet_code": "LINE_TOPUP_ADVICE",
+      "trigger": "/topup",
+      "category": "LINE STATUS",
+      "keywords": ["topup", "not active", "expired", "recharge"],
+      "text": "Line is not active on IN data (expired). Advised customer to top up their account to resume services."
+    },
+    {
+      "snippet_code": "GENERAL_MPESA_STATEMENT",
+      "trigger": "/statement",
+      "category": "GENERAL",
+      "keywords": ["statement", "m-pesa", "free", "email"],
+      "text": "Our Stamped M-PESA Statement is now available for FREE without visiting any retail shop or calling. Dial *334#>My account>M-PESA statement>Full statement."
+    },
+    {
+      "snippet_code": "GENERAL_TILL_APPLICATION",
+      "trigger": "/till",
+      "category": "GENERAL",
+      "keywords": ["till", "m-pesa for business", "apply"],
+      "text": "Jambo, click on https://m-pesaforbusiness.co.ke/LNM/ to apply for a till. Thank you."
+    },
+    {
+      "snippet_code": "GENERAL_DATA_MANAGEMENT",
+      "trigger": "/data",
+      "category": "GENERAL",
+      "keywords": ["data", "usage", "background data", "efficient"],
+      "text": "Sub advised to restrict background data, stop auto download of videos and photos, stop auto updates of apps to efficiently manage data usage."
+    }
+  ]
+}

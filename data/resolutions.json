@@ -1,0 +1,247 @@
+{
+  "resolutions": [
+    {
+      "resolution_code": "SWAP_VETTING_PASSED",
+      "display_name": "SIM Swap - Vetting Passed",
+      "issue_code": "SIM_SWAP",
+      "outcome": "approved",
+      "advice": "SIM swap processed successfully. Advise customer to use their new SIM.",
+      "next_step": "Inform about migration of services and M-PESA app reinstall.",
+      "template_text": "Customer vetting passed. SIM swap processed. Advised on app migration and to reinstall M-PESA app on new SIM."
+    },
+    {
+      "resolution_code": "SWAP_VETTING_FAILED",
+      "display_name": "SIM Swap - Vetting Failed",
+      "issue_code": "SIM_SWAP",
+      "outcome": "escalated",
+      "advice": "Visit retail center with valid ID or call back with correct details.",
+      "next_step": "Escalate to retail or request callback with verified details.",
+      "template_text": "Vetting failed. Advised to visit nearest Safaricom Retail Center with valid ID or call back with correct details."
+    },
+    {
+      "resolution_code": "SWAP_KYC_MISMATCH",
+      "display_name": "SIM Swap - KYC Mismatch",
+      "issue_code": "SIM_SWAP",
+      "outcome": "escalated",
+      "advice": "Visit retail center to update KYC details before proceeding.",
+      "next_step": "Direct to RC for KYC update and SIM swap.",
+      "template_text": "KYC mismatch detected. Advised to visit Retail Center with correct ID to update KYC details before SIM swap."
+    },
+    {
+      "resolution_code": "SWAP_MAX_REQUESTS",
+      "display_name": "SIM Swap - Max Requests Reached",
+      "issue_code": "SIM_SWAP",
+      "outcome": "escalated",
+      "advice": "Customer has exceeded max swap requests. Visit retail center.",
+      "next_step": "Escalate to manager or direct to RC.",
+      "template_text": "Maximum SIM swap requests reached. Advised to visit nearest Retail Center for manual processing."
+    },
+    {
+      "resolution_code": "SWAP_NOT_ACTIVE",
+      "display_name": "SIM Swap - Line Not Active",
+      "issue_code": "SIM_SWAP",
+      "outcome": "escalated",
+      "advice": "Call from alternate line or visit retail center for replacement.",
+      "next_step": "Arrange callback or direct to RC.",
+      "template_text": "Line not active. Advised to call from agent line or visit nearest Retail Center for SIM replacement."
+    },
+    {
+      "resolution_code": "REVERSAL_2HRS",
+      "display_name": "Reversal - 2 Hour SLA",
+      "issue_code": "REVERSAL",
+      "outcome": "processing",
+      "advice": "Reversal initiated. 2-hour SLA. Educate on Hakikisha feature.",
+      "next_step": "Advise patience and to check status in 2 hours.",
+      "template_text": "Reversal initiated with 2-hour SLA. Educated on Hakikisha feature. Advised to be patient during processing."
+    },
+    {
+      "resolution_code": "REVERSAL_12HRS",
+      "display_name": "Reversal - 12 Hour SLA",
+      "issue_code": "REVERSAL",
+      "outcome": "processing",
+      "advice": "Reversal initiated. 12-hour SLA. Educate on Hakikisha.",
+      "next_step": "Advise patience and provide reference number.",
+      "template_text": "Reversal initiated with 12-hour SLA. Educated on Hakikisha feature. Advised to wait for confirmation."
+    },
+    {
+      "resolution_code": "REVERSAL_72HRS",
+      "display_name": "Reversal - 72 Hour SLA",
+      "issue_code": "REVERSAL",
+      "outcome": "processing",
+      "advice": "Reversal initiated. 72-hour SLA. Educate on Hakikisha.",
+      "next_step": "Provide reference; advise callback after SLA.",
+      "template_text": "Reversal initiated with 72-hour SLA. Educated on Hakikisha feature. Advised to check status after 72 hours."
+    },
+    {
+      "resolution_code": "REVERSAL_SR_RAISED",
+      "display_name": "Reversal - SR Raised",
+      "issue_code": "REVERSAL",
+      "outcome": "escalated",
+      "advice": "Service Request raised for manual reversal. 72-hour SLA.",
+      "next_step": "Provide SR reference; advise callback after SLA.",
+      "template_text": "Service Request raised for reversal processing. SLA: 72 hours. Advised to call back for status update."
+    },
+    {
+      "resolution_code": "REVERSAL_PENDING",
+      "display_name": "Reversal - Pending Authorization",
+      "issue_code": "REVERSAL",
+      "outcome": "processing",
+      "advice": "Reversal pending authorization within SLA. Advised patience.",
+      "next_step": "Provide timeline; advise to call back.",
+      "template_text": "Reversal pending authorization within SLA. Advised to be patient as authorization is being processed."
+    },
+    {
+      "resolution_code": "REVERSAL_CONTACT_ORG",
+      "display_name": "Reversal - Contact Business",
+      "issue_code": "REVERSAL",
+      "outcome": "escalated",
+      "advice": "For PayBill reversals, contact business directly or use SMS reversal.",
+      "next_step": "Provide SMS number 456 or business contact.",
+      "template_text": "For PayBill reversal, contact the business or send M-PESA message to SMS 456 within 24 hours."
+    },
+    {
+      "resolution_code": "PIN_DIY_PROVIDED",
+      "display_name": "PIN - DIY Procedure Provided",
+      "issue_code": "MPESA_STARTKEY_PIN",
+      "outcome": "resolved",
+      "advice": "Provided DIY procedure for PIN reset/setup.",
+      "next_step": "Customer to follow USSD steps; callback if issues.",
+      "template_text": "M-PESA PIN procedure provided. Customer educated on DIY steps. SMS sent with instructions."
+    },
+    {
+      "resolution_code": "PIN_RESET_DIY",
+      "display_name": "PIN - Reset DIY",
+      "issue_code": "MPESA_STARTKEY_PIN",
+      "outcome": "resolved",
+      "advice": "Customer educated on forgot PIN procedure via USSD.",
+      "next_step": "Customer to use *334# to reset; callback if needed.",
+      "template_text": "PIN reset procedure provided. Customer advised to use Safaricom app or dial *334# to reset PIN."
+    },
+    {
+      "resolution_code": "PIN_SQ_SETUP",
+      "display_name": "PIN - Security Questions Setup",
+      "issue_code": "MPESA_STARTKEY_PIN",
+      "outcome": "resolved",
+      "advice": "Security questions setup provided for PIN recovery.",
+      "next_step": "Customer to set questions; advise recording answers.",
+      "template_text": "M-PESA security questions setup procedure provided. Customer advised to set 3 questions for PIN recovery."
+    },
+    {
+      "resolution_code": "PIN_DIY_FAILED",
+      "display_name": "PIN - DIY Failed",
+      "issue_code": "MPESA_STARTKEY_PIN",
+      "outcome": "escalated",
+      "advice": "DIY unsuccessful. Advise visit RC or callback.",
+      "next_step": "Escalate to RC for manual PIN reset.",
+      "template_text": "DIY procedure unsuccessful. Advised to visit nearest Retail Center or call back for manual assistance."
+    },
+    {
+      "resolution_code": "PIN_VISIT_RC",
+      "display_name": "PIN - Visit Retail Center",
+      "issue_code": "MPESA_STARTKEY_PIN",
+      "outcome": "escalated",
+      "advice": "Customer requires in-person verification for PIN reset.",
+      "next_step": "Direct to RC with valid ID.",
+      "template_text": "Advised to visit nearest Safaricom Retail Center with valid ID for M-PESA PIN reset."
+    },
+    {
+      "resolution_code": "PUK_PROVIDED",
+      "display_name": "PUK - Code Provided",
+      "issue_code": "PUK",
+      "outcome": "resolved",
+      "advice": "PUK code provided. Customer educated on unblocking procedure.",
+      "next_step": "Customer to follow unblocking steps.",
+      "template_text": "PUK code provided. Customer educated on DIY procedure to unblock SIM using provided code."
+    },
+    {
+      "resolution_code": "PUK_DIY_ussd",
+      "display_name": "PUK - DIY USSD",
+      "issue_code": "PUK",
+      "outcome": "resolved",
+      "advice": "USSD DIY procedure provided to retrieve PUK.",
+      "next_step": "Customer uses *100# or *456# to get PUK.",
+      "template_text": "PUK DIY procedure (USSD) provided. Customer advised to dial *100# or *456# from another line to receive PUK."
+    },
+    {
+      "resolution_code": "PUK_DIY_APP",
+      "display_name": "PUK - DIY App Link",
+      "issue_code": "PUK",
+      "outcome": "resolved",
+      "advice": "App link provided to retrieve PUK without needing another line.",
+      "next_step": "Customer clicks link to retrieve PUK code.",
+      "template_text": "PUK retrieval link provided: https://safaricomapp.page.link/get-puk. Customer can retrieve PUK directly."
+    },
+    {
+      "resolution_code": "PUK_VISIT_RC",
+      "display_name": "PUK - Visit Retail Center",
+      "issue_code": "PUK",
+      "outcome": "escalated",
+      "advice": "Customer unable to retrieve PUK online. Direct to RC.",
+      "next_step": "Visit RC with ID for manual assistance.",
+      "template_text": "Advised to visit nearest Safaricom Retail Center with valid ID to retrieve PUK and unblock SIM."
+    },
+    {
+      "resolution_code": "POOLED_SR_RAISED",
+      "display_name": "Pooled Lines - SR Raised",
+      "issue_code": "POOLED_LINES",
+      "outcome": "escalated",
+      "advice": "Service Request raised for pooled line recreation.",
+      "next_step": "Provide SR reference; advise callback after 72hrs.",
+      "template_text": "Service Request raised for pooled line recreation. SLA: 72 hours. Customer advised to call back for status."
+    },
+    {
+      "resolution_code": "POOLED_ADVICE_PATIENCE",
+      "display_name": "Pooled Lines - Advise Patience",
+      "issue_code": "POOLED_LINES",
+      "outcome": "processing",
+      "advice": "Advise patience as SR is being processed.",
+      "next_step": "Provide reference; customer callback as needed.",
+      "template_text": "Pooled line recreation is being processed. Advised to be patient and call back if needed."
+    },
+    {
+      "resolution_code": "POOLED_VISIT_RC",
+      "display_name": "Pooled Lines - Visit RC",
+      "issue_code": "POOLED_LINES",
+      "outcome": "escalated",
+      "advice": "Escalate to RC for corporate/pooled support.",
+      "next_step": "Contact RC during business hours.",
+      "template_text": "Advised to visit or contact nearest Retail Center for corporate pooled line support."
+    },
+    {
+      "resolution_code": "LOAN_BILLING_CORRECTED",
+      "display_name": "Loan - Billing Issue Corrected",
+      "issue_code": "LOAN_ISSUES",
+      "outcome": "resolved",
+      "advice": "Billing correction applied to loan account.",
+      "next_step": "Apologize and advise to resume normal use.",
+      "template_text": "Billing issue corrected. An adjustment has been made to your account. Sorry for the inconvenience."
+    },
+    {
+      "resolution_code": "LOAN_LIMIT_INCREASE",
+      "display_name": "Loan - Limit Increase Advice",
+      "issue_code": "LOAN_ISSUES",
+      "outcome": "advice",
+      "advice": "Advise on limit increase through continued usage and savings.",
+      "next_step": "Educate on using services to boost limit.",
+      "template_text": "Advised to save and transact regularly to increase loan limit over time."
+    },
+    {
+      "resolution_code": "LOAN_DEBT_CLEAR",
+      "display_name": "Loan - Clear Outstanding Debt",
+      "issue_code": "LOAN_ISSUES",
+      "outcome": "escalated",
+      "advice": "Outstanding debt detected. Customer must clear before accessing loan.",
+      "next_step": "Advise on payment options.",
+      "template_text": "Outstanding debt detected. Advised to clear past due amount to resume loan accessibility."
+    },
+    {
+      "resolution_code": "LOAN_ADVICE",
+      "display_name": "Loan - General Advice",
+      "issue_code": "LOAN_ISSUES",
+      "outcome": "advice",
+      "advice": "Provide general guidance on loan terms and conditions.",
+      "next_step": "Educate and advise accordingly.",
+      "template_text": "Advised on loan terms and conditions. Continue using services responsibly to maintain/increase limit."
+    }
+  ]
+}
