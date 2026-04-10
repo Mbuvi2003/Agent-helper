@@ -38,7 +38,7 @@ from updater import check_for_update, download_and_apply
 # Preferred category display order (most frequent first).
 # Categories not in this list are appended alphabetically at the end.
 CATEGORY_ORDER = [
-    'SIM SWAP', 'MPESA', 'LINE ISSUES', 'PIN', 'LNM',
+    'SIM SWAP', 'MPESA', 'LNM', 'LINE ISSUES', 'PIN',
     'SDP', 'REVERSAL', 'GENERAL',
 ]
 
