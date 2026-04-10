@@ -148,14 +148,16 @@ def download_and_apply(download_url, github_token="", progress_cb=None):
                     done += len(chunk)
                     if progress_cb and total:
                         progress_cb(done, total)
-        # Batch script waits for this process to exit, then replaces exe and restarts
+        # Batch script waits for this process to exit, then replaces exe and restarts.
+        # /D sets the working directory so the app finds its data/ folder.
+        exe_dir = str(exe_path.parent)
         bat = Path(tempfile.gettempdir()) / "agenthelper_update.bat"
         bat.write_text(
             f'@echo off\n'
             f'timeout /t 2 /nobreak >nul\n'
             f'copy /y "{tmp}" "{exe_path}"\n'
             f'del "{tmp}"\n'
-            f'start "" "{exe_path}"\n'
+            f'start "" /D "{exe_dir}" "{exe_path}"\n'
             f'del "%~f0"\n'
         )
         subprocess.Popen(['cmd', '/c', str(bat)], creationflags=0x08000000)
