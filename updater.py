@@ -15,6 +15,10 @@ REPO_OWNER = "Mbuvi2003"
 REPO_NAME = "Agent-helper"
 API_URL = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 
+# Fallback token embedded in the exe (read-only, releases scope only).
+# This means the updater always works even if settings.json loses the token.
+_FALLBACK_TOKEN = "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"
+
 
 def _get_exe_path():
     if getattr(sys, 'frozen', False):
@@ -45,6 +49,8 @@ def _ver(v):
 
 def check_for_update(github_token=""):
     """Returns dict: {available, latest_version, download_url, notes, error}."""
+    if not github_token:
+        github_token = _FALLBACK_TOKEN
     result = {
         'available': False,
         'latest_version': '',
@@ -71,7 +77,9 @@ def check_for_update(github_token=""):
             result['notes'] = data.get('body', '')
             for asset in data.get('assets', []):
                 if asset['name'].lower().endswith('.exe'):
-                    result['download_url'] = asset['browser_download_url']
+                    # Use API url (not browser_download_url) for private-repo downloads.
+                    # GET api.github.com/...assets/{id} with Accept:octet-stream → 302 → S3.
+                    result['download_url'] = asset['url']
                     break
     except HTTPError as e:
         if e.code == 401:
@@ -88,22 +96,47 @@ def check_for_update(github_token=""):
 
 
 def download_and_apply(download_url, github_token="", progress_cb=None):
-    """Download the new exe and schedule replacement via a batch script."""
+    """Download the new exe and schedule replacement via a batch script.
+    Returns (True, "") on success or (False, error_message) on failure.
+    """
+    if not github_token:
+        github_token = _FALLBACK_TOKEN
     exe_path = _get_exe_path()
     if not exe_path:
-        return False
+        return False, "Not running as a packaged exe"
     try:
-        req = Request(
+        import urllib.request
+        import urllib.parse
+
+        _token = github_token
+
+        class _AuthRedirectHandler(urllib.request.HTTPRedirectHandler):
+            """Strip Authorization when redirecting to a different domain."""
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                orig_host = urllib.parse.urlparse(req.full_url).netloc
+                new_host = urllib.parse.urlparse(newurl).netloc
+                new_req = urllib.request.Request(
+                    newurl,
+                    headers={
+                        'User-Agent': 'AgentHelper',
+                        'Accept': 'application/octet-stream',
+                    },
+                )
+                if new_host == orig_host:
+                    new_req.add_header('Authorization', f'token {_token}')
+                return new_req
+
+        opener = urllib.request.build_opener(_AuthRedirectHandler())
+        req = urllib.request.Request(
             download_url,
             headers={
                 'Accept': 'application/octet-stream',
                 'User-Agent': 'AgentHelper',
+                'Authorization': f'token {_token}',
             },
         )
-        if github_token:
-            req.add_header('Authorization', f'token {github_token}')
         tmp = Path(tempfile.gettempdir()) / "AgentHelper_update.exe"
-        with urlopen(req, timeout=120) as resp:
+        with opener.open(req, timeout=120) as resp:
             total = int(resp.headers.get('Content-Length', 0))
             done = 0
             with open(tmp, 'wb') as f:
@@ -126,6 +159,6 @@ def download_and_apply(download_url, github_token="", progress_cb=None):
             f'del "%~f0"\n'
         )
         subprocess.Popen(['cmd', '/c', str(bat)], creationflags=0x08000000)
-        return True
-    except Exception:
-        return False
+        return True, ""
+    except Exception as e:
+        return False, str(e)

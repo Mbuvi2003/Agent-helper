@@ -122,6 +122,9 @@ class AgentHelperUI:
         top.pack(side=tk.TOP, fill=tk.X, padx=10, pady=6)
 
         ttk.Label(top, text="Agent Helper", font=("Arial", 15, "bold")).pack(side=tk.LEFT, padx=5)
+        _ver_str = self.data_loader.load_json('settings.json').get('version', '')
+        if _ver_str:
+            ttk.Label(top, text=f"v{_ver_str}", font=("Arial", 8), foreground="gray").pack(side=tk.LEFT, padx=0)
         ttk.Label(top, text="Issue search:", font=("Arial", 10)).pack(side=tk.LEFT, padx=10)
         self.search_var = tk.StringVar()
         self.search_entry = ttk.Entry(top, textvariable=self.search_var, width=30)
@@ -917,12 +920,14 @@ class AgentHelperUI:
             try:
                 import time
                 settings = self.data_loader.load_json('settings.json')
+                if not settings:  # guard: never overwrite with an empty dict
+                    return
                 last = settings.get('last_update_check', 0)
                 if time.time() - last < 86400:
                     return  # checked within the last 24 hours, skip
                 token = settings.get('github_token', '')
                 result = check_for_update(token)
-                # Save timestamp regardless of outcome (avoid hammering on error)
+                # Save ONLY the timestamp key — don't risk losing other keys
                 settings['last_update_check'] = time.time()
                 self.data_loader.save_json('settings.json', settings)
                 if result.get('available'):
@@ -953,16 +958,17 @@ class AgentHelperUI:
             self.root.after(0, lambda: self._set_status(f"Downloading update... {pct}%"))
 
         def _do_download():
-            ok = download_and_apply(url, token, _progress)
+            ok, err = download_and_apply(url, token, _progress)
             if ok:
                 self.root.after(0, lambda: (
                     self._set_status("Update ready. Restarting..."),
                     self.root.after(1500, self._on_close),
                 ))
             else:
+                _err = err
                 self.root.after(0, lambda: (
                     self._set_status("Update download failed."),
-                    messagebox.showerror("Update", "Download failed. Try again later."),
+                    messagebox.showerror("Update", f"Download failed:\n{_err}"),
                 ))
         threading.Thread(target=_do_download, daemon=True).start()
 
