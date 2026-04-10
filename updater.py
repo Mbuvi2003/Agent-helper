@@ -150,11 +150,12 @@ def download_and_apply(download_url, github_token="", progress_cb=None):
                         progress_cb(done, total)
         # Batch script waits for this process to exit, then replaces exe and restarts.
         # /D sets the working directory so the app finds its data/ folder.
+        # We wait 4s so the old PyInstaller _MEI* temp dir is fully cleaned up first.
         exe_dir = str(exe_path.parent)
         bat = Path(tempfile.gettempdir()) / "agenthelper_update.bat"
         bat.write_text(
             f'@echo off\n'
-            f'timeout /t 2 /nobreak >nul\n'
+            f'timeout /t 4 /nobreak >nul\n'
             f'copy /y "{tmp}" "{exe_path}"\n'
             f'del "{tmp}"\n'
             f'start "" /D "{exe_dir}" "{exe_path}"\n'
