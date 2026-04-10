@@ -21,7 +21,7 @@ Start-Sleep -Seconds 1
 
 # ── Build exe ─────────────────────────────────────────────────────
 Write-Host "`n=== Building exe ===" -ForegroundColor Cyan
-pyinstaller --onefile --windowed --name AgentHelper --hidden-import keyboard --icon images\icon.ico --add-data "images\icon.ico;images" main.py
+pyinstaller --onefile --windowed --name AgentHelper --hidden-import keyboard --icon images\icon.ico --add-data "images\icon.ico;images" --runtime-tmpdir . main.py
 if ($LASTEXITCODE -ne 0) {
     Write-Host "BUILD FAILED." -ForegroundColor Red
     exit 1
