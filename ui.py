@@ -946,6 +946,8 @@ class AgentHelperUI:
         if not messagebox.askyesno("Update Available", msg):
             return
         url = result.get('download_url', '')
+        dl_name = result.get('download_name', '')
+        dl_size = result.get('download_size', 0)
         if not url:
             messagebox.showerror("Update", "No download link found in release.")
             return
@@ -958,7 +960,9 @@ class AgentHelperUI:
             self.root.after(0, lambda: self._set_status(f"Downloading update... {pct}%"))
 
         def _do_download():
-            ok, err = download_and_apply(url, token, _progress)
+            ok, err = download_and_apply(url, token, _progress,
+                                          expected_size=dl_size,
+                                          download_name=dl_name)
             if ok:
                 self.root.after(0, lambda: (
                     self._set_status("Update ready. Restarting..."),

@@ -43,6 +43,10 @@ if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path "dist\AgentHelper.exe", "dist\data" -DestinationPath $zip
 Write-Host "Zip ready: $zip" -ForegroundColor Yellow
 
+# ── Copy images ──────────────────────────────────────────────────
+Write-Host "`n=== Copying images ===" -ForegroundColor Cyan
+Copy-Item -Path "images" -Destination "dist\images" -Recurse -Force
+
 # ── Git commit & push ─────────────────────────────────────────────
 Write-Host "`n=== Pushing code to GitHub ===" -ForegroundColor Cyan
 git add -A
@@ -73,10 +77,10 @@ try {
         -Method Post -Headers $headers -Body $releaseBody -ContentType "application/json"
 
     Invoke-RestMethod `
-        -Uri "https://uploads.github.com/repos/Mbuvi2003/Agent-helper/releases/$($release.id)/assets?name=AgentHelper.exe" `
+        -Uri "https://uploads.github.com/repos/Mbuvi2003/Agent-helper/releases/$($release.id)/assets?name=AgentHelper.zip" `
         -Method Post `
-        -Headers @{ Authorization = "token $token"; "Content-Type" = "application/octet-stream" } `
-        -InFile "dist\AgentHelper.exe" | Out-Null
+        -Headers @{ Authorization = "token $token"; "Content-Type" = "application/zip" } `
+        -InFile "dist\AgentHelper.zip" | Out-Null
 
     Write-Host "GitHub release v$version published." -ForegroundColor Green
 } catch {

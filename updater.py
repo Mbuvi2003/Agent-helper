@@ -1,12 +1,13 @@
 """
 Auto-updater for Agent Helper.
-Checks GitHub Releases for a newer version, downloads, and replaces the exe.
+Checks GitHub Releases for a newer version, downloads zip, and replaces the exe.
 """
 
 import json
 import sys
 import subprocess
 import tempfile
+import zipfile
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
@@ -76,11 +77,17 @@ def check_for_update(github_token=""):
             result['latest_version'] = tag
             result['notes'] = data.get('body', '')
             for asset in data.get('assets', []):
-                if asset['name'].lower().endswith('.exe'):
-                    # Use API url (not browser_download_url) for private-repo downloads.
-                    # GET api.github.com/...assets/{id} with Accept:octet-stream → 302 → S3.
+                name = asset['name'].lower()
+                # Prefer .zip, fall back to .exe
+                if name.endswith('.zip'):
                     result['download_url'] = asset['url']
+                    result['download_name'] = asset['name']
+                    result['download_size'] = asset['size']
                     break
+                if name.endswith('.exe') and 'download_url' not in result:
+                    result['download_url'] = asset['url']
+                    result['download_name'] = asset['name']
+                    result['download_size'] = asset['size']
     except HTTPError as e:
         if e.code == 401:
             result['error'] = 'auth'  # bad/expired token
@@ -95,8 +102,9 @@ def check_for_update(github_token=""):
     return result
 
 
-def download_and_apply(download_url, github_token="", progress_cb=None):
-    """Download the new exe and schedule replacement via a batch script.
+def download_and_apply(download_url, github_token="", progress_cb=None,
+                       expected_size=0, download_name=""):
+    """Download the update (zip or exe), add Defender exclusion, and schedule swap.
     Returns (True, "") on success or (False, error_message) on failure.
     """
     if not github_token:
@@ -107,8 +115,10 @@ def download_and_apply(download_url, github_token="", progress_cb=None):
     try:
         import urllib.request
         import urllib.parse
+        import os
 
         _token = github_token
+        is_zip = download_name.lower().endswith('.zip')
 
         class _AuthRedirectHandler(urllib.request.HTTPRedirectHandler):
             """Strip Authorization when redirecting to a different domain."""
@@ -135,8 +145,11 @@ def download_and_apply(download_url, github_token="", progress_cb=None):
                 'Authorization': f'token {_token}',
             },
         )
-        tmp = Path(tempfile.gettempdir()) / "AgentHelper_update.exe"
-        with opener.open(req, timeout=120) as resp:
+
+        # Download to temp
+        suffix = '.zip' if is_zip else '.exe'
+        tmp = Path(tempfile.gettempdir()) / f"AgentHelper_update{suffix}"
+        with opener.open(req, timeout=180) as resp:
             total = int(resp.headers.get('Content-Length', 0))
             done = 0
             with open(tmp, 'wb') as f:
@@ -148,17 +161,42 @@ def download_and_apply(download_url, github_token="", progress_cb=None):
                     done += len(chunk)
                     if progress_cb and total:
                         progress_cb(done, total)
-        # PowerShell launcher: Wait-Process waits for the current PID to fully exit
-        # (including PyInstaller _MEI temp cleanup), then copies and relaunches.
-        import os
+
+        # Verify download size
+        if expected_size and tmp.stat().st_size != expected_size:
+            return False, f"Size mismatch: got {tmp.stat().st_size}, expected {expected_size}"
+
+        # If zip, extract the exe from it
+        new_exe = tmp
+        if is_zip:
+            with zipfile.ZipFile(tmp, 'r') as zf:
+                exe_names = [n for n in zf.namelist() if n.lower().endswith('.exe')]
+                if not exe_names:
+                    return False, "No .exe found in update zip"
+                new_exe = Path(tempfile.gettempdir()) / "AgentHelper_update.exe"
+                with zf.open(exe_names[0]) as src, open(new_exe, 'wb') as dst:
+                    dst.write(src.read())
+
+        # Add Defender exclusion for the exe folder (suppress errors if not admin)
+        exe_dir = str(exe_path.parent)
+        try:
+            subprocess.run(
+                ['powershell.exe', '-WindowStyle', 'Hidden', '-Command',
+                 f'Add-MpPreference -ExclusionPath \'{exe_dir}\' -ErrorAction SilentlyContinue'],
+                creationflags=0x08000000, timeout=10
+            )
+        except Exception:
+            pass  # Not admin — that's fine
+
+        # PowerShell launcher: Wait-Process → copy → relaunch
         pid = os.getpid()
         new_ver = get_current_version()
-        exe_dir = str(exe_path.parent)
         ps1 = Path(tempfile.gettempdir()) / "agenthelper_update.ps1"
         ps1.write_text(
             f'Wait-Process -Id {pid} -ErrorAction SilentlyContinue\n'
-            f'Start-Sleep -Seconds 4\n'
-            f'Copy-Item -Force \'{tmp}\' \'{exe_path}\'\n'
+            f'Start-Sleep -Seconds 5\n'
+            f'Copy-Item -Force \'{new_exe}\' \'{exe_path}\'\n'
+            f'Remove-Item -Force \'{new_exe}\' -ErrorAction SilentlyContinue\n'
             f'Remove-Item -Force \'{tmp}\' -ErrorAction SilentlyContinue\n'
             f'Start-Process \'{exe_path}\' -ArgumentList \'--updated {new_ver}\' -WorkingDirectory \'{exe_dir}\'\n'
             f'Remove-Item -Force $MyInvocation.MyCommand.Path -ErrorAction SilentlyContinue\n',
