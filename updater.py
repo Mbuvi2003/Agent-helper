@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 from urllib.request import Request, urlopen
-from urllib.error import URLError
+from urllib.error import URLError, HTTPError
 
 REPO_OWNER = "Mbuvi2003"
 REPO_NAME = "Agent-helper"
@@ -73,6 +73,13 @@ def check_for_update(github_token=""):
                 if asset['name'].lower().endswith('.exe'):
                     result['download_url'] = asset['browser_download_url']
                     break
+    except HTTPError as e:
+        if e.code == 401:
+            result['error'] = 'auth'  # bad/expired token
+        elif e.code == 404:
+            result['error'] = 'notfound'  # wrong repo or no releases yet
+        else:
+            result['error'] = f'http_{e.code}'
     except URLError:
         result['error'] = 'offline'
     except Exception as e:

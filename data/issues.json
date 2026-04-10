@@ -73,7 +73,8 @@
         "Jambo,dial *334#>My account>Unlock m-pesa pin>ID number>Wait for confirmation message.",
         "Line is not active on IN data, advised to top up.",
         "Sub advised to call after 24hrs or visit Safaricom shop for assistance.",
-        "Failed vetting. Sub advised to confirm details and call back or visit RC or try DIY."
+        "Failed vetting. Sub advised to confirm details and call back or visit RC or try DIY.",
+        "Language barrier — sub advised to call back from agent line or visit nearest Retailer/Service Centre for assistance."
       ],
       "valid_resolutions": ["PIN_DIY_PROVIDED", "PIN_RESET_DIY", "PIN_SQ_SETUP", "PIN_DIY_FAILED", "PIN_VISIT_RC"]
     },

@@ -31,6 +31,11 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "`n=== Copying data folder ===" -ForegroundColor Cyan
 Copy-Item -Path "data" -Destination "dist\data" -Recurse -Force
 
+# Ensure github_token is present in the dist copy (source data/ should not commit the token)
+$distSettings = Get-Content "dist\data\settings.json" -Raw | ConvertFrom-Json
+$distSettings | Add-Member -NotePropertyName "github_token" -NotePropertyValue $token -Force
+$distSettings | ConvertTo-Json -Depth 5 | Set-Content "dist\data\settings.json" -Encoding UTF8
+
 # ── Create zip ────────────────────────────────────────────────────
 Write-Host "`n=== Creating zip ===" -ForegroundColor Cyan
 $zip = "$PSScriptRoot\dist\AgentHelper.zip"

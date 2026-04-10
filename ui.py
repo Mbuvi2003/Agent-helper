@@ -884,7 +884,23 @@ class AgentHelperUI:
                 elif result.get('error') == 'offline':
                     self.root.after(0, lambda: (
                         self._set_status("No internet connection."),
-                        messagebox.showinfo("Updates", "Could not reach GitHub. Check your connection."),
+                        messagebox.showwarning("Updates", "Could not reach GitHub.\nCheck your internet connection."),
+                    ))
+                elif result.get('error') == 'auth':
+                    self.root.after(0, lambda: (
+                        self._set_status("Update check failed: invalid token."),
+                        messagebox.showerror("Updates", "GitHub token is invalid or expired.\nContact your administrator to get a fresh copy of the app."),
+                    ))
+                elif result.get('error') == 'notfound':
+                    self.root.after(0, lambda: (
+                        self._set_status("No releases found."),
+                        messagebox.showinfo("Updates", "No releases found on GitHub yet."),
+                    ))
+                elif result.get('error'):
+                    err = result['error']
+                    self.root.after(0, lambda: (
+                        self._set_status(f"Update check error: {err}"),
+                        messagebox.showerror("Updates", f"Update check failed:\n{err}"),
                     ))
                 else:
                     self.root.after(0, lambda: (
