@@ -51,6 +51,20 @@ class AgentHelperUI:
         self.root.title("Agent Helper - Call Center Assistant")
         self.root.minsize(1100, 700)
 
+        # Set window & taskbar icon
+        try:
+            import sys
+            from pathlib import Path
+            if getattr(sys, 'frozen', False):
+                _base = Path(sys.executable).parent
+            else:
+                _base = Path(__file__).parent
+            _ico = _base / 'images' / 'icon.ico'
+            if _ico.exists():
+                self.root.iconbitmap(str(_ico))
+        except Exception:
+            pass
+
         # Data & engines
         self.data_loader = DataLoader("data")
         all_data = self.data_loader.load_all()
@@ -125,6 +139,10 @@ class AgentHelperUI:
         ttk.Label(top, textvariable=self.calling_no_var, font=("Consolas", 11),
                   foreground="blue", width=12).pack(side=tk.LEFT, padx=2)
         ttk.Button(top, text="Copy", command=self._copy_calling_no).pack(side=tk.LEFT, padx=2)
+
+        # Check for updates button (far right)
+        ttk.Separator(top, orient=tk.VERTICAL).pack(side=tk.RIGHT, padx=8, fill=tk.Y)
+        ttk.Button(top, text="⟳ Updates", command=self._manual_check_update).pack(side=tk.RIGHT, padx=4)
 
         # ── Main 3-column content ──
         body = ttk.Frame(self.root)
@@ -852,6 +870,30 @@ class AgentHelperUI:
         self.status_var.set(msg)
 
     # ─── AUTO-UPDATE ─────────────────────────────────────────────
+
+    def _manual_check_update(self):
+        """Triggered by the Updates button — always checks, ignores 24h throttle."""
+        self._set_status("Checking for updates...")
+        def _run():
+            try:
+                settings = self.data_loader.load_json('settings.json')
+                token = settings.get('github_token', '')
+                result = check_for_update(token)
+                if result.get('available'):
+                    self.root.after(0, lambda: self._prompt_update(result))
+                elif result.get('error') == 'offline':
+                    self.root.after(0, lambda: (
+                        self._set_status("No internet connection."),
+                        messagebox.showinfo("Updates", "Could not reach GitHub. Check your connection."),
+                    ))
+                else:
+                    self.root.after(0, lambda: (
+                        self._set_status("You're up to date."),
+                        messagebox.showinfo("Updates", "You're already on the latest version."),
+                    ))
+            except Exception as e:
+                self.root.after(0, lambda: self._set_status(f"Update check failed: {e}"))
+        threading.Thread(target=_run, daemon=True).start()
 
     def _check_update_async(self):
         """Run update check in background thread, at most once every 24 hours."""
