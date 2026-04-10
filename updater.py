@@ -148,26 +148,26 @@ def download_and_apply(download_url, github_token="", progress_cb=None):
                     done += len(chunk)
                     if progress_cb and total:
                         progress_cb(done, total)
-        # Batch script polls until the old PID exits (PyInstaller temp fully cleaned),
-        # then replaces the exe and restarts it with --updated so the app shows
-        # a success notification.
+        # PowerShell launcher: Wait-Process waits for the current PID to fully exit
+        # (including PyInstaller _MEI temp cleanup), then copies and relaunches.
         import os
         pid = os.getpid()
         new_ver = get_current_version()
         exe_dir = str(exe_path.parent)
-        bat = Path(tempfile.gettempdir()) / "agenthelper_update.bat"
-        bat.write_text(
-            f'@echo off\n'
-            f':WAIT\n'
-            f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul\n'
-            f'if not errorlevel 1 (timeout /t 1 /nobreak >nul & goto WAIT)\n'
-            f'timeout /t 2 /nobreak >nul\n'
-            f'copy /y "{tmp}" "{exe_path}"\n'
-            f'del "{tmp}"\n'
-            f'start "" /D "{exe_dir}" "{exe_path}" --updated {new_ver}\n'
-            f'del "%~f0"\n'
+        ps1 = Path(tempfile.gettempdir()) / "agenthelper_update.ps1"
+        ps1.write_text(
+            f'Wait-Process -Id {pid} -ErrorAction SilentlyContinue\n'
+            f'Start-Sleep -Seconds 4\n'
+            f'Copy-Item -Force \'{tmp}\' \'{exe_path}\'\n'
+            f'Remove-Item -Force \'{tmp}\' -ErrorAction SilentlyContinue\n'
+            f'Start-Process \'{exe_path}\' -ArgumentList \'--updated {new_ver}\' -WorkingDirectory \'{exe_dir}\'\n'
+            f'Remove-Item -Force $MyInvocation.MyCommand.Path -ErrorAction SilentlyContinue\n',
+            encoding='utf-8'
         )
-        subprocess.Popen(['cmd', '/c', str(bat)], creationflags=0x08000000)
+        subprocess.Popen(
+            ['powershell.exe', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', str(ps1)],
+            creationflags=0x08000000
+        )
         return True, ""
     except Exception as e:
         return False, str(e)
