@@ -1,6 +1,9 @@
 """
 Auto-updater for Agent Helper.
-Checks GitHub Releases for a newer version, downloads zip, and replaces the exe.
+Checks GitHub Releases for a newer version, downloads zip, and replaces the app folder.
+
+With --onedir builds there is NO runtime DLL extraction — all files are already
+on disk, so Windows Defender never flags anything.
 """
 
 import json
@@ -8,6 +11,7 @@ import sys
 import subprocess
 import tempfile
 import zipfile
+import os
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
@@ -17,13 +21,13 @@ REPO_NAME = "Agent-helper"
 API_URL = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 
 # Fallback token embedded in the exe (read-only, releases scope only).
-# This means the updater always works even if settings.json loses the token.
 _FALLBACK_TOKEN = "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"
 
 
-def _get_exe_path():
+def _get_app_dir():
+    """Return the directory containing the running exe (the --onedir output folder)."""
     if getattr(sys, 'frozen', False):
-        return Path(sys.executable)
+        return Path(sys.executable).parent
     return None
 
 
@@ -49,13 +53,15 @@ def _ver(v):
 
 
 def check_for_update(github_token=""):
-    """Returns dict: {available, latest_version, download_url, notes, error}."""
+    """Returns dict with update info."""
     if not github_token:
         github_token = _FALLBACK_TOKEN
     result = {
         'available': False,
         'latest_version': '',
         'download_url': '',
+        'download_name': '',
+        'download_size': 0,
         'notes': '',
         'error': '',
     }
@@ -77,22 +83,16 @@ def check_for_update(github_token=""):
             result['latest_version'] = tag
             result['notes'] = data.get('body', '')
             for asset in data.get('assets', []):
-                name = asset['name'].lower()
-                # Prefer .zip, fall back to .exe
-                if name.endswith('.zip'):
+                if asset['name'].lower().endswith('.zip'):
                     result['download_url'] = asset['url']
                     result['download_name'] = asset['name']
                     result['download_size'] = asset['size']
                     break
-                if name.endswith('.exe') and 'download_url' not in result:
-                    result['download_url'] = asset['url']
-                    result['download_name'] = asset['name']
-                    result['download_size'] = asset['size']
     except HTTPError as e:
         if e.code == 401:
-            result['error'] = 'auth'  # bad/expired token
+            result['error'] = 'auth'
         elif e.code == 404:
-            result['error'] = 'notfound'  # wrong repo or no releases yet
+            result['error'] = 'notfound'
         else:
             result['error'] = f'http_{e.code}'
     except URLError:
@@ -104,21 +104,23 @@ def check_for_update(github_token=""):
 
 def download_and_apply(download_url, github_token="", progress_cb=None,
                        expected_size=0, download_name=""):
-    """Download the update (zip or exe), add Defender exclusion, and schedule swap.
+    """Download the update zip and schedule a full folder replacement.
+
+    The zip contains the entire --onedir output (AgentHelper/ folder with exe + DLLs).
+    A PowerShell script waits for this process to exit, swaps folders, and relaunches.
+
     Returns (True, "") on success or (False, error_message) on failure.
     """
     if not github_token:
         github_token = _FALLBACK_TOKEN
-    exe_path = _get_exe_path()
-    if not exe_path:
+    app_dir = _get_app_dir()
+    if not app_dir:
         return False, "Not running as a packaged exe"
     try:
         import urllib.request
         import urllib.parse
-        import os
 
         _token = github_token
-        is_zip = download_name.lower().endswith('.zip')
 
         class _AuthRedirectHandler(urllib.request.HTTPRedirectHandler):
             """Strip Authorization when redirecting to a different domain."""
@@ -146,13 +148,12 @@ def download_and_apply(download_url, github_token="", progress_cb=None,
             },
         )
 
-        # Download to temp
-        suffix = '.zip' if is_zip else '.exe'
-        tmp = Path(tempfile.gettempdir()) / f"AgentHelper_update{suffix}"
+        # Download zip to temp
+        tmp_zip = Path(tempfile.gettempdir()) / "AgentHelper_update.zip"
         with opener.open(req, timeout=180) as resp:
             total = int(resp.headers.get('Content-Length', 0))
             done = 0
-            with open(tmp, 'wb') as f:
+            with open(tmp_zip, 'wb') as f:
                 while True:
                     chunk = resp.read(8192)
                     if not chunk:
@@ -163,42 +164,61 @@ def download_and_apply(download_url, github_token="", progress_cb=None,
                         progress_cb(done, total)
 
         # Verify download size
-        if expected_size and tmp.stat().st_size != expected_size:
-            return False, f"Size mismatch: got {tmp.stat().st_size}, expected {expected_size}"
+        if expected_size and tmp_zip.stat().st_size != expected_size:
+            return False, f"Size mismatch: got {tmp_zip.stat().st_size}, expected {expected_size}"
 
-        # If zip, extract the exe from it
-        new_exe = tmp
-        if is_zip:
-            with zipfile.ZipFile(tmp, 'r') as zf:
-                exe_names = [n for n in zf.namelist() if n.lower().endswith('.exe')]
-                if not exe_names:
-                    return False, "No .exe found in update zip"
-                new_exe = Path(tempfile.gettempdir()) / "AgentHelper_update.exe"
-                with zf.open(exe_names[0]) as src, open(new_exe, 'wb') as dst:
-                    dst.write(src.read())
+        # Extract zip to a temp staging folder
+        staging = Path(tempfile.gettempdir()) / "AgentHelper_staging"
+        if staging.exists():
+            import shutil
+            shutil.rmtree(staging, ignore_errors=True)
+        with zipfile.ZipFile(tmp_zip, 'r') as zf:
+            zf.extractall(staging)
 
-        # Add Defender exclusion for the exe folder (suppress errors if not admin)
-        exe_dir = str(exe_path.parent)
-        try:
-            subprocess.run(
-                ['powershell.exe', '-WindowStyle', 'Hidden', '-Command',
-                 f'Add-MpPreference -ExclusionPath \'{exe_dir}\' -ErrorAction SilentlyContinue'],
-                creationflags=0x08000000, timeout=10
-            )
-        except Exception:
-            pass  # Not admin — that's fine
+        # Find the extracted folder containing AgentHelper.exe
+        extracted_exe = None
+        for root, dirs, files in os.walk(staging):
+            for f in files:
+                if f.lower() == 'agenthelper.exe':
+                    extracted_exe = Path(root) / f
+                    break
+            if extracted_exe:
+                break
 
-        # PowerShell launcher: Wait-Process → copy → relaunch
+        if not extracted_exe:
+            return False, "No AgentHelper.exe found in update zip"
+
+        new_app_dir = extracted_exe.parent
+
+        # Build PowerShell update script:
+        # 1. Wait for current process to fully exit
+        # 2. Remove old app files (keep data/ and images/ for user settings)
+        # 3. Copy new files in
+        # 4. Relaunch with --updated flag
         pid = os.getpid()
-        new_ver = get_current_version()
+        exe_name = Path(sys.executable).name
+        exe_path = app_dir / exe_name
         ps1 = Path(tempfile.gettempdir()) / "agenthelper_update.ps1"
         ps1.write_text(
             f'Wait-Process -Id {pid} -ErrorAction SilentlyContinue\n'
-            f'Start-Sleep -Seconds 5\n'
-            f'Copy-Item -Force \'{new_exe}\' \'{exe_path}\'\n'
-            f'Remove-Item -Force \'{new_exe}\' -ErrorAction SilentlyContinue\n'
-            f'Remove-Item -Force \'{tmp}\' -ErrorAction SilentlyContinue\n'
-            f'Start-Process \'{exe_path}\' -ArgumentList \'--updated {new_ver}\' -WorkingDirectory \'{exe_dir}\'\n'
+            f'Start-Sleep -Seconds 3\n'
+            f'\n'
+            f'$appDir = \'{app_dir}\'\n'
+            f'$newDir = \'{new_app_dir}\'\n'
+            f'$exe    = \'{exe_path}\'\n'
+            f'\n'
+            f'# Remove old files EXCEPT data/ and images/ (user settings)\n'
+            f'Get-ChildItem $appDir -Exclude data,images | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue\n'
+            f'\n'
+            f'# Copy all new files into app dir\n'
+            f'Get-ChildItem $newDir | Copy-Item -Destination $appDir -Recurse -Force\n'
+            f'\n'
+            f'# Clean up staging\n'
+            f'Remove-Item -Recurse -Force \'{staging}\' -ErrorAction SilentlyContinue\n'
+            f'Remove-Item -Force \'{tmp_zip}\' -ErrorAction SilentlyContinue\n'
+            f'\n'
+            f'# Relaunch\n'
+            f'Start-Process $exe -ArgumentList \'--updated\' -WorkingDirectory $appDir\n'
             f'Remove-Item -Force $MyInvocation.MyCommand.Path -ErrorAction SilentlyContinue\n',
             encoding='utf-8'
         )

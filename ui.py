@@ -1000,15 +1000,11 @@ class AgentHelperUI:
 
 def main():
     import sys
-    updated_from = None
-    if '--updated' in sys.argv:
-        idx = sys.argv.index('--updated')
-        if idx + 1 < len(sys.argv):
-            updated_from = sys.argv[idx + 1]
+    was_updated = '--updated' in sys.argv
 
     root = tk.Tk()
     app = AgentHelperUI(root)
-    if updated_from:
+    if was_updated:
         root.after(800, lambda: messagebox.showinfo(
             "Update Complete",
             f"Successfully updated to v{app.data_loader.load_json('settings.json').get('version', '')}!"

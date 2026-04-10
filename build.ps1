@@ -19,33 +19,32 @@ Write-Host "`n=== Stopping any running AgentHelper ===" -ForegroundColor Cyan
 Stop-Process -Name AgentHelper -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
 
-# ── Build exe ─────────────────────────────────────────────────────
-Write-Host "`n=== Building exe ===" -ForegroundColor Cyan
-pyinstaller --onefile --windowed --name AgentHelper --hidden-import keyboard --icon images\icon.ico --add-data "images\icon.ico;images" --runtime-tmpdir . main.py
+# ── Build exe (--onedir: no runtime DLL extraction → no Defender issues) ──
+Write-Host "`n=== Building exe (onedir mode) ===" -ForegroundColor Cyan
+pyinstaller --onedir --windowed --name AgentHelper --hidden-import keyboard --icon images\icon.ico --add-data "images\icon.ico;images" main.py
 if ($LASTEXITCODE -ne 0) {
     Write-Host "BUILD FAILED." -ForegroundColor Red
     exit 1
 }
 
-# ── Copy data folder ──────────────────────────────────────────────
-Write-Host "`n=== Copying data folder ===" -ForegroundColor Cyan
-Copy-Item -Path "data" -Destination "dist\data" -Recurse -Force
+# dist\AgentHelper\ now contains AgentHelper.exe + all DLLs
 
-# Ensure github_token is present in the dist copy (source data/ should not commit the token)
-$distSettings = Get-Content "dist\data\settings.json" -Raw | ConvertFrom-Json
+# ── Copy data & images into the onedir output ─────────────────────
+Write-Host "`n=== Copying data & images into dist\AgentHelper ===" -ForegroundColor Cyan
+Copy-Item -Path "data"   -Destination "dist\AgentHelper\data"   -Recurse -Force
+Copy-Item -Path "images" -Destination "dist\AgentHelper\images" -Recurse -Force
+
+# Ensure github_token is present in the dist copy
+$distSettings = Get-Content "dist\AgentHelper\data\settings.json" -Raw | ConvertFrom-Json
 $distSettings | Add-Member -NotePropertyName "github_token" -NotePropertyValue $token -Force
-$distSettings | ConvertTo-Json -Depth 5 | Set-Content "dist\data\settings.json" -Encoding UTF8
+$distSettings | ConvertTo-Json -Depth 5 | Set-Content "dist\AgentHelper\data\settings.json" -Encoding UTF8
 
-# ── Create zip ────────────────────────────────────────────────────
+# ── Create zip of the entire folder ───────────────────────────────
 Write-Host "`n=== Creating zip ===" -ForegroundColor Cyan
 $zip = "$PSScriptRoot\dist\AgentHelper.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
-Compress-Archive -Path "dist\AgentHelper.exe", "dist\data" -DestinationPath $zip
+Compress-Archive -Path "dist\AgentHelper\*" -DestinationPath $zip
 Write-Host "Zip ready: $zip" -ForegroundColor Yellow
-
-# ── Copy images ──────────────────────────────────────────────────
-Write-Host "`n=== Copying images ===" -ForegroundColor Cyan
-Copy-Item -Path "images" -Destination "dist\images" -Recurse -Force
 
 # ── Git commit & push ─────────────────────────────────────────────
 Write-Host "`n=== Pushing code to GitHub ===" -ForegroundColor Cyan
