@@ -32,6 +32,7 @@ from vetting_engine import VettingEngine
 from resolution_engine import ResolutionEngine
 from snippet_engine import SnippetEngine
 from text_utils import extract_sdp_codes
+from updater import check_for_update, download_and_apply
 
 
 # Preferred category display order (most frequent first).
@@ -97,6 +98,7 @@ class AgentHelperUI:
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self._last_clipboard = ""  # for clipboard polling
         self._poll_clipboard()
+        self._check_update_async()
 
     # ─── UI BUILD ────────────────────────────────────────────────
 
@@ -848,6 +850,63 @@ class AgentHelperUI:
 
     def _set_status(self, msg: str):
         self.status_var.set(msg)
+
+    # ─── AUTO-UPDATE ─────────────────────────────────────────────
+
+    def _check_update_async(self):
+        """Run update check in background thread, at most once every 24 hours."""
+        def _run():
+            try:
+                import time
+                settings = self.data_loader.load_json('settings.json')
+                last = settings.get('last_update_check', 0)
+                if time.time() - last < 86400:
+                    return  # checked within the last 24 hours, skip
+                token = settings.get('github_token', '')
+                result = check_for_update(token)
+                # Save timestamp regardless of outcome (avoid hammering on error)
+                settings['last_update_check'] = time.time()
+                self.data_loader.save_json('settings.json', settings)
+                if result.get('available'):
+                    self.root.after(0, lambda: self._prompt_update(result))
+            except Exception:
+                pass
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _prompt_update(self, result):
+        """Show update dialog and download if user agrees."""
+        ver = result.get('latest_version', '')
+        notes = result.get('notes', '').strip()
+        msg = f"Version {ver} is available.\n\nDownload and install now?"
+        if notes:
+            msg += f"\n\nRelease notes:\n{notes[:300]}"
+        if not messagebox.askyesno("Update Available", msg):
+            return
+        url = result.get('download_url', '')
+        if not url:
+            messagebox.showerror("Update", "No download link found in release.")
+            return
+        self._set_status("Downloading update...")
+        settings = self.data_loader.load_json('settings.json')
+        token = settings.get('github_token', '')
+
+        def _progress(done, total):
+            pct = int(done / total * 100)
+            self.root.after(0, lambda: self._set_status(f"Downloading update... {pct}%"))
+
+        def _do_download():
+            ok = download_and_apply(url, token, _progress)
+            if ok:
+                self.root.after(0, lambda: (
+                    self._set_status("Update ready. Restarting..."),
+                    self.root.after(1500, self._on_close),
+                ))
+            else:
+                self.root.after(0, lambda: (
+                    self._set_status("Update download failed."),
+                    messagebox.showerror("Update", "Download failed. Try again later."),
+                ))
+        threading.Thread(target=_do_download, daemon=True).start()
 
     def _on_close(self):
         """Save state and close the application."""
