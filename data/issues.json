@@ -7,10 +7,24 @@
       "synonyms": ["sim swap", "sim replacement", "swap", "new sim", "replace sim"],
       "keywords": ["swap", "sim", "vetting", "kyc", "mismatch", "recycled", "prison"],
       "requires_vetting": true,
-      "vetting_fields": ["name", "id", "yob", "msisdn", "serial_no", "mpesa_balance", "airtime_balance", "fuliza_limit", "mshwari_limit", "kcb_limit"],
-      "valid_resolutions": ["SWAP_VETTING_PASSED", "SWAP_VETTING_FAILED", "SWAP_KYC_MISMATCH", "SWAP_MAX_REQUESTS", "SWAP_NOT_ACTIVE"],
-      "default_response_template": "Customer contacted regarding SIM swap. Vetting {vetting_status}. Advised to {resolution_advice}.",
-      "snippets": ["SIM_SWAP_PATIENT", "SIM_SWAP_VETTING_FAILED", "SIM_SWAP_KYC_MISMATCH", "SIM_SWAP_NOT_ACTIVE"]
+      "vetting_fields": ["Serial No", "Name", "ID", "YOB", "MPESA", "Airtime", "Fuliza Limit", "M-Shwari Limit", "2FDNs", "Registration Date", "KCB M-PESA Limit", "2Txn", "Storo Target", "Last Bundle Purchase"],
+      "interaction_notes": [
+        "Sub not in prison site",
+        "Sim swap done vetted on:"
+      ],
+      "guidance": [
+        "Line has been recycled advised to buy new line.",
+        "Sub advised to call from agent line or to visit RC as caller is not active.",
+        "Jambo, use your M-PESA pin to activate. Go to M-PESA Activate>Start key (Your current M-PESA pin) >Repeat the current pin twice>enter ID Number. Thank you.",
+        "Line is not active on IN data, suspended due to Okoa, to clear debt to swap line.",
+        "Failed vetting to visit RC for swap.",
+        "KYC mismatch to visit RC for swap.",
+        "Sub advised to call from agent line or visit RC as caller has reached MAX requests.",
+        "Outbound call made, line busy. Sub advised to visit RC for replacement.",
+        "Failed vetting. Sub advised to confirm details and call back or visit RC.",
+        "Line is not active on IN data, expired, advised to top up."
+      ],
+      "valid_resolutions": ["SWAP_VETTING_PASSED", "SWAP_VETTING_FAILED", "SWAP_KYC_MISMATCH", "SWAP_DISPUTED", "SWAP_RECYCLED", "SWAP_MAX_REQUESTS", "SWAP_NOT_ACTIVE"]
     },
     {
       "issue_code": "REVERSAL",
@@ -20,45 +34,83 @@
       "keywords": ["reversal", "reverse", "sla", "hakikisha", "authorized", "pending", "recipient"],
       "requires_vetting": false,
       "vetting_fields": [],
-      "valid_resolutions": ["REVERSAL_2HRS", "REVERSAL_12HRS", "REVERSAL_72HRS", "REVERSAL_SR_RAISED", "REVERSAL_PENDING", "REVERSAL_CONTACT_ORG"],
-      "default_response_template": "Reversal initiated. SLA: {sla}. Customer advised on Hakikisha and to be patient.",
-      "snippets": ["REVERSAL_2HRS_SLA", "REVERSAL_72HRS_SLA", "REVERSAL_12HRS_SLA", "REVERSAL_HAKIKISHA", "REVERSAL_SMS_456"]
+      "interaction_notes": [
+        "Reversal initiated sub advised on SLA of 2hrs educated on hakikisha.",
+        "Reversal initiated sub advised on SLA of 72hrs and educated on hakikisha.",
+        "Reversal initiated sub advised on SLA of 12hrs educated on hakikisha.",
+        "SR raised sub advised on :SLA 72hrs, educated on hakikisha.",
+        "Reversal initiated advised on 12 hrs SLA, hakikisha sms sent."
+      ],
+      "guidance": [
+        "Pending authorized, within SLA advised to be patient.",
+        "Jambo, Sasa ni rahisi kuhakikisha kwamba pesa zako zinaenda kwa nambari sahihi na M-PESA. HAKIKISHA Kwa kubonyeza 1 KUKAMILISHA au 2 KUSIMAMISHA kutuma pesa.",
+        "Dial *100#ok > M-PESA /Reversal> Hakikisha> Opt in > ID number > Yes",
+        "Jambo, to reverse forward the MPESA message to 456 within 24hours. Thank you.",
+        "Sub advised to be patient as reversal is within SLA of 2hrs.",
+        "Jambo, contact ORG on 254711049612 chargeable at normal rates for assistance. Thank you. To reverse paybill send m-pesa message sms to 456.",
+        "Sub advised to contact org for assistance sms sent.",
+        "Sub advised to liaise with recipient or report to police.",
+        "Our Stamped M-PESA Statement is now available for FREE without visiting any retail shop or calling. Dial *334#>My account>M-PESA statement>Full statement."
+      ],
+      "valid_resolutions": ["REVERSAL_2HRS", "REVERSAL_12HRS", "REVERSAL_72HRS", "REVERSAL_PENDING", "REVERSAL_CONTACT_ORG", "REVERSAL_POLICE"]
     },
     {
       "issue_code": "MPESA_STARTKEY_PIN",
       "display_name": "M-PESA Start Key / PIN",
-      "category": "PIN",
-      "synonyms": ["mpesa pin", "start key", "pin reset", "m-pesa startkey", "pin forgotten"],
-      "keywords": ["pin", "startkey", "start-key", "mpesa", "diy", "prison", "not active"],
+      "category": "MPESA",
+      "synonyms": ["mpesa pin", "start key", "pin reset", "m-pesa startkey", "pin forgotten", "forgot pin"],
+      "keywords": ["pin", "startkey", "start-key", "mpesa", "diy", "forgot", "reset"],
       "requires_vetting": true,
-      "vetting_fields": ["name", "id", "yob", "msisdn", "mpesa_balance", "contact_no"],
-      "valid_resolutions": ["PIN_DIY_PROVIDED", "PIN_RESET_DIY", "PIN_SQ_SETUP", "PIN_DIY_FAILED", "PIN_VISIT_RC"],
-      "default_response_template": "M-PESA START KEY provided. Customer {vetting_status}. Educated on DIY procedure.",
-      "snippets": ["PIN_DIY_PROCEDURE", "PIN_RESET_PROCEDURE", "PIN_SQ_SETUP", "PIN_UNLOCK", "PIN_STATEMENT"]
+      "vetting_fields": ["Name", "ID", "YOB", "MPESA", "Airtime", "Fuliza Limit", "2FDNs", "M-Shwari Limit", "Registration Date", "KCB M-PESA Limit", "2Txn", "Storo Target", "Last Bundle Purchase"],
+      "interaction_notes": [
+        "Sub not in prison site, educated on DIY procedure and sms sent.",
+        "Sub given start-key and vetted on:"
+      ],
+      "guidance": [
+        "Sub advised to try DIY or visit RC assistance.",
+        "Jambo, dial *334# >My Account>M-PESA PIN Manager >Set M-PESA Security Questions and answers>Enter ID/PP number>Set 3 Questions>Enter M-PESA PIN. To reset PIN Dial *334#OK>My Account>M-PESA PIN Manager>M-PESA Forgot PIN>Enter ID/PP number>Answer security questions provided to get Pin. Thankyou.",
+        "Dial *334#>Select My Account>Choose M\u2011Pesa Statement>Select Full Statement>Choose duration (1, 3, 6, or 12 months)>Enter your email address. You'll receive a PDF in your email within minutes.",
+        "Jambo,dial *334#>My account>Unlock m-pesa pin>ID number>Wait for confirmation message.",
+        "Line is not active on IN data, advised to top up.",
+        "Sub advised to call after 24hrs or visit Safaricom shop for assistance.",
+        "Failed vetting. Sub advised to confirm details and call back or visit RC or try DIY."
+      ],
+      "valid_resolutions": ["PIN_DIY_PROVIDED", "PIN_RESET_DIY", "PIN_SQ_SETUP", "PIN_DIY_FAILED", "PIN_VISIT_RC"]
     },
     {
       "issue_code": "PUK",
       "display_name": "PUK Code",
-      "category": "PUK",
+      "category": "LINE ISSUES",
       "synonyms": ["puk", "puk code", "unblock sim", "blocked line", "puk number"],
       "keywords": ["puk", "blocked", "locked", "unblock", "get puk"],
       "requires_vetting": true,
-      "vetting_fields": ["name", "id", "yob"],
-      "valid_resolutions": ["PUK_PROVIDED", "PUK_DIY_ussd", "PUK_DIY_APP", "PUK_VISIT_RC"],
-      "default_response_template": "PUK code provided. Customer educated on DIY retrieval procedure.",
-      "snippets": ["PUK_DIY_USSD", "PUK_DIY_APP_LINK"]
+      "vetting_fields": ["Name", "ID", "YOB"],
+      "interaction_notes": [
+        "Educated on DIY procedure and sms sent.",
+        "PUK given vetted on:"
+      ],
+      "guidance": [
+        "Jambo, kupata PUK ya line iliyofungika, bonyeza *456# ukitumia simu nyingine na kuchagua Get PUK Number na kufuata maagizo.Asante",
+        "To get PUK for the blocked line, dial *100# from a different line, select Get PUK number or click https://safaricomapp.page.link/get-puk."
+      ],
+      "valid_resolutions": ["PUK_PROVIDED", "PUK_DIY_USSD", "PUK_DIY_APP", "PUK_VISIT_RC"]
     },
     {
       "issue_code": "POOLED_LINES",
       "display_name": "Pooled Lines / Corporate",
-      "category": "LINE STATUS",
+      "category": "LINE ISSUES",
       "synonyms": ["pooled", "corporate", "pooled status", "line recreation", "business account"],
       "keywords": ["pooled", "corporate", "recreation", "sr raised", "sla"],
       "requires_vetting": true,
-      "vetting_fields": ["name", "id", "msisdn", "contact_no"],
-      "valid_resolutions": ["POOLED_SR_RAISED", "POOLED_ADVICE_PATIENCE", "POOLED_VISIT_RC"],
-      "default_response_template": "Service Request raised for pooled line recreation. SLA: 72hrs.",
-      "snippets": ["POOLED_SR_RAISED"]
+      "vetting_fields": ["Name", "MSISDN", "ID", "Contact No", "Serial No"],
+      "interaction_notes": [
+        "SR raised; SLA: 72 hrs; sub advised."
+      ],
+      "guidance": [
+        "SR raised for pooled line recreation. SLA: 72 hrs.",
+        "Sub advised to be patient and wait for callback."
+      ],
+      "valid_resolutions": ["POOLED_SR_RAISED", "POOLED_VISIT_RC"]
     },
     {
       "issue_code": "OVERSCRATCHED",
@@ -67,10 +119,16 @@
       "synonyms": ["overscratched", "scratched card", "topup failed", "card used"],
       "keywords": ["overscratched", "scratch", "topup", "verified"],
       "requires_vetting": true,
-      "vetting_fields": ["serial_no", "amount"],
-      "valid_resolutions": ["OVERSCRATCHED_VERIFIED", "OVERSCRATCHED_REFUND", "OVERSCRATCHED_VISIT_RC"],
-      "default_response_template": "Card verified not overscratched. Customer advised accordingly.",
-      "snippets": []
+      "vetting_fields": ["Amount", "Serial No"],
+      "interaction_notes": [
+        "Verified; not in prison or overscratched site."
+      ],
+      "guidance": [
+        "Verify card serial and amount.",
+        "Check if card is in overscratched database.",
+        "If verified → credit applied; if not → sub advised to visit RC."
+      ],
+      "valid_resolutions": ["OVERSCRATCHED_VERIFIED", "OVERSCRATCHED_REFUND", "OVERSCRATCHED_VISIT_RC"]
     },
     {
       "issue_code": "BONGA_PIN",
@@ -79,22 +137,33 @@
       "synonyms": ["bonga pin", "service pin", "bonga reset", "loyalty pin"],
       "keywords": ["bonga", "service pin", "reset", "diy"],
       "requires_vetting": true,
-      "vetting_fields": ["name", "id", "msisdn"],
-      "valid_resolutions": ["BONGA_DIY_APP", "BONGA_SMS_SENT", "BONGA_VISIT_RC"],
-      "default_response_template": "Bonga PIN reset. Customer educated on DIY procedure via Safaricom App.",
-      "snippets": ["BONGA_DIY_APP"]
+      "vetting_fields": ["Name", "ID", "MPESA", "2FDNs", "Airtime", "Fuliza Limit", "M-Shwari Limit", "KCB M-PESA Limit", "Storo Target", "2Txn", "Registration Date", "Last Bundle Purchase"],
+      "interaction_notes": [
+        "Educated on DIY procedure and sms sent.",
+        "Sub reset for bonga pin vetted on:"
+      ],
+      "guidance": [
+        "NB Mpesa Pin and Service Pin are the Bonga pin.",
+        "Sub to reset Service Pin using Safaricom App."
+      ],
+      "valid_resolutions": ["BONGA_DIY_APP", "BONGA_SMS_SENT", "BONGA_VISIT_RC"]
     },
     {
       "issue_code": "RESUMING_LINE",
       "display_name": "Line Resumption",
-      "category": "LINE STATUS",
-      "synonyms": ["resume", "resuming line", "activate line", "line active"],
-      "keywords": ["resume", "resumed", "resuming", "active"],
+      "category": "LINE ISSUES",
+      "synonyms": ["resume", "resuming line", "activate line", "line active", "reactivate"],
+      "keywords": ["resume", "resumed", "resuming", "active", "reactivate"],
       "requires_vetting": true,
-      "vetting_fields": ["name", "id", "msisdn"],
-      "valid_resolutions": ["LINE_RESUMED", "LINE_RESUME_TOPUP", "LINE_RESUME_VISIT_RC"],
-      "default_response_template": "Line resumed successfully. Customer advised to use services normally.",
-      "snippets": []
+      "vetting_fields": ["Name", "ID", "MPESA", "2FDNs", "Airtime", "Fuliza Limit", "M-Shwari Limit", "KCB M-PESA Limit", "Storo Target", "2Txn", "Registration Date", "Last Bundle Purchase"],
+      "interaction_notes": [
+        "Line resumed sub vetted on:"
+      ],
+      "guidance": [
+        "Verify subscriber details before resuming.",
+        "Line resumed; sub advised to use services normally."
+      ],
+      "valid_resolutions": ["LINE_RESUMED", "LINE_RESUME_TOPUP", "LINE_RESUME_VISIT_RC"]
     },
     {
       "issue_code": "VOICEMAIL_PIN",
@@ -103,34 +172,154 @@
       "synonyms": ["voicemail", "voice mail", "voicemail pin", "vm pin"],
       "keywords": ["voicemail", "voice mail", "vm", "132"],
       "requires_vetting": true,
-      "vetting_fields": ["name", "id", "msisdn"],
-      "valid_resolutions": ["VM_PIN_RESET", "VM_DIAL_132"],
-      "default_response_template": "Voicemail PIN reset. Customer advised to dial 132 and follow prompts.",
-      "snippets": ["VM_DIAL_132"]
+      "vetting_fields": ["Name", "MSISDN", "ID"],
+      "interaction_notes": [
+        "Voicemail PIN reset; sub vetted on:"
+      ],
+      "guidance": [
+        "Dial 132 and follow prompts to reset voicemail PIN."
+      ],
+      "valid_resolutions": ["VM_PIN_RESET", "VM_DIAL_132"]
     },
     {
       "issue_code": "LINE_NOT_ACTIVE",
       "display_name": "Line Not Active / InData",
-      "category": "LINE STATUS",
+      "category": "LINE ISSUES",
       "synonyms": ["not active", "inactive", "expired", "in data", "no signal", "suspended"],
       "keywords": ["not active", "inactive", "expired", "topup", "data", "suspended", "debt"],
       "requires_vetting": false,
       "vetting_fields": [],
-      "valid_resolutions": ["LINE_TOPUP_ADVISED", "LINE_OKOA_DEBT", "LINE_VISIT_RC", "LINE_CONTACT_AGENT"],
-      "default_response_template": "Line not active on IN data. Customer advised to top up or settle outstanding debt.",
-      "snippets": ["LINE_TOPUP_ADVICE"]
+      "interaction_notes": [
+        "Line not active on IN data; sub advised."
+      ],
+      "guidance": [
+        "Line expired or suspended → advised to top up or clear debt.",
+        "Sub advised to visit RC if issue persists."
+      ],
+      "valid_resolutions": ["LINE_TOPUP_ADVISED", "LINE_OKOA_DEBT", "LINE_VISIT_RC"]
     },
     {
-      "issue_code": "LOAN_ISSUES",
-      "display_name": "Loan / Fuliza / M-Shwari / KCB Issues",
-      "category": "LOANS",
-      "synonyms": ["fuliza", "m-shwari", "kcb m-pesa", "loan", "loan limit", "billing issue"],
-      "keywords": ["fuliza", "mshwari", "kcb", "loan", "limit", "billing", "debt", "past due"],
+      "issue_code": "SUSPENDING_LINE",
+      "display_name": "Suspending Line (Lost/Stolen)",
+      "category": "LINE ISSUES",
+      "synonyms": ["suspend", "suspending line", "lost phone", "stolen phone", "block line", "lost sim"],
+      "keywords": ["suspend", "lost", "stolen", "block", "suspending"],
       "requires_vetting": true,
-      "vetting_fields": ["name", "id", "fuliza_limit", "mshwari_limit", "kcb_limit", "mpesa_balance"],
-      "valid_resolutions": ["LOAN_BILLING_CORRECTED", "LOAN_LIMIT_INCREASE", "LOAN_DEBT_CLEAR", "LOAN_ADVICE"],
-      "default_response_template": "Loan matter addressed. Customer advised on terms and conditions or next steps.",
-      "snippets": ["LOAN_BILLING_ADJUSTMENT", "LOAN_LIMIT_INCREASE_ADVICE"]
+      "vetting_fields": ["Name", "ID", "YOB"],
+      "interaction_notes": [
+        "Lost/stolen Line suspended mpesa as well sub vetted on:",
+        "Mpesa APP, Safaricom APP profile cleared."
+      ],
+      "guidance": [],
+      "valid_resolutions": ["LINE_SUSPENDED", "LINE_SUSPEND_VISIT_RC"]
+    },
+    {
+      "issue_code": "MPESA_AGENT",
+      "display_name": "M-PESA Agent Vetting",
+      "category": "MPESA",
+      "synonyms": ["mpesa agent", "agent vetting", "agent number", "operator id"],
+      "keywords": ["agent", "operator", "mpesa agent", "vetting"],
+      "requires_vetting": true,
+      "vetting_fields": ["Operator ID", "Agent Number", "Agent Name", "Agent ID Number"],
+      "interaction_notes": [
+        "Agent vetted on:"
+      ],
+      "guidance": [],
+      "valid_resolutions": ["AGENT_VETTED"]
+    },
+    {
+      "issue_code": "SKIZA",
+      "display_name": "Skiza",
+      "category": "SDP",
+      "synonyms": ["skiza", "skiza tune", "skiza code", "skiza billing"],
+      "keywords": ["skiza", "811", "tune", "billing"],
+      "requires_vetting": false,
+      "vetting_fields": [],
+      "interaction_notes": [
+        "Sub was being billed on skiza CODE ,deactivated and advised on DIY by dialing *811#."
+      ],
+      "guidance": [
+        "Dial *811# to manage Skiza tunes and deactivate."
+      ],
+      "valid_resolutions": ["SKIZA_DEACTIVATED"]
+    },
+    {
+      "issue_code": "PRS",
+      "display_name": "PRS (Premium Rate Services)",
+      "category": "SDP",
+      "synonyms": ["prs", "premium rate", "premium services", "subscriptions"],
+      "keywords": ["prs", "premium", "subscription", "100"],
+      "requires_vetting": false,
+      "vetting_fields": [],
+      "interaction_notes": [
+        "Sub was being billed on PRS code - CODE. Deleted and advised on DIY by dialing *100#."
+      ],
+      "guidance": [
+        "Dial *811# or *100# and go to my subscriptions to check for any active subscriptions and deactivate.",
+        "https://www.safaricom.co.ke/personal/value-added-services/information-services/prs-providers"
+      ],
+      "valid_resolutions": ["PRS_DEACTIVATED"]
+    },
+    {
+      "issue_code": "PROMOTIONAL_MESSAGES",
+      "display_name": "Promotional Messages",
+      "category": "SDP",
+      "synonyms": ["promotional", "promo messages", "promo sms", "stop promotions"],
+      "keywords": ["promotional", "promo", "messages", "456"],
+      "requires_vetting": false,
+      "vetting_fields": [],
+      "interaction_notes": [
+        "Sub deactivated for promotional message CODE advised to dial *456*9*5# to stop promotional messages."
+      ],
+      "guidance": [
+        "Dial *456*9*5# to stop promotional messages."
+      ],
+      "valid_resolutions": ["PROMO_DEACTIVATED"]
+    },
+    {
+      "issue_code": "TILL_SWAP",
+      "display_name": "Till Swap - SFC",
+      "category": "LNM",
+      "synonyms": ["till swap", "sfc swap", "store swap"],
+      "keywords": ["till", "swap", "sfc", "store"],
+      "requires_vetting": true,
+      "vetting_fields": ["Org Name", "Store/Till No", "Org Contact", "Serial No"],
+      "interaction_notes": [
+        "Swap done, Vetted on:"
+      ],
+      "guidance": [],
+      "valid_resolutions": ["TILL_SWAP_DONE", "TILL_SWAP_VISIT_RC"]
+    },
+    {
+      "issue_code": "TILL_PUK",
+      "display_name": "Till PUK - SFC",
+      "category": "LNM",
+      "synonyms": ["till puk", "sfc puk", "store puk"],
+      "keywords": ["till", "puk", "sfc", "store"],
+      "requires_vetting": true,
+      "vetting_fields": ["Org Name", "Store/Till No", "Org Contact"],
+      "interaction_notes": [
+        "PUK issued, Vetted on:"
+      ],
+      "guidance": [],
+      "valid_resolutions": ["TILL_PUK_DONE", "TILL_PUK_VISIT_RC"]
+    },
+    {
+      "issue_code": "TILL_STARTKEY",
+      "display_name": "Till Startkey Vetting",
+      "category": "LNM",
+      "synonyms": ["till startkey", "till start key", "till pin", "sfc startkey"],
+      "keywords": ["till", "startkey", "start-key", "pin", "234"],
+      "requires_vetting": true,
+      "vetting_fields": ["Name", "Operator ID", "YOB", "ID", "Store/Till No", "Account Balance", "Recent Outgoing Txn"],
+      "interaction_notes": [
+        "Start key issued",
+        "vetted on:"
+      ],
+      "guidance": [
+        "Jambo kindly dial *234# for pin reset"
+      ],
+      "valid_resolutions": ["TILL_STARTKEY_DONE", "TILL_STARTKEY_VISIT_RC"]
     }
   ]
 }

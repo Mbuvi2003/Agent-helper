@@ -5,6 +5,7 @@ Handles loading, validating, and saving JSON data files.
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
@@ -13,7 +14,12 @@ class DataLoader:
     
     def __init__(self, data_folder: str = "data"):
         """Initialize data loader with folder path."""
-        self.data_folder = Path(data_folder)
+        # When bundled by PyInstaller, resolve relative to the .exe location
+        if getattr(sys, 'frozen', False):
+            base = Path(sys.executable).parent
+        else:
+            base = Path.cwd()
+        self.data_folder = base / data_folder
         self.data_folder.mkdir(exist_ok=True)
         
     def load_json(self, filename: str) -> Dict[str, Any]:
@@ -39,11 +45,14 @@ class DataLoader:
             return False
     
     def load_all(self) -> Dict[str, Any]:
-        """Load all data files."""
+        """Load all data files, unwrapping inner wrapper keys."""
+        issues_raw = self.load_json('issues.json')
+        snippets_raw = self.load_json('snippets.json')
+        resolutions_raw = self.load_json('resolutions.json')
         return {
-            'issues': self.load_json('issues.json'),
-            'snippets': self.load_json('snippets.json'),
-            'resolutions': self.load_json('resolutions.json'),
+            'issues': issues_raw.get('issues', []) if isinstance(issues_raw, dict) else issues_raw,
+            'snippets': snippets_raw.get('snippets', []) if isinstance(snippets_raw, dict) else snippets_raw,
+            'resolutions': resolutions_raw.get('resolutions', []) if isinstance(resolutions_raw, dict) else resolutions_raw,
             'settings': self.load_json('settings.json'),
             'history': self.load_json('history.json'),
             'favorites': self.load_json('favorites.json')

@@ -44,20 +44,86 @@ def test_app():
     vetting_engine = VettingEngine()
     
     print(f"\n[3] Vetting Engine Test:")
-    sample_text = """
+
+    # ── Test A: CRM multi-line layout (VIEW360 style) ──
+    crm_text = """
+    Bio Card
+
+    First Name
+    NGIRUSIO
+
+    Middle Name
+    KASELE
+
+    Last Name
+    LOGIEL
+
+    D.O.B
+    01/07/1987
+
+    ID Number
+    33000129
+
+    Airtime Balance
+    23.50
+
+    M-PESA Balance: 1,250.00
+    """
+    extracted = vetting_engine.extract_from_text(crm_text)
+    print(f"  [A] CRM multi-line — Extracted {len(extracted)} fields:")
+    for field, value in extracted.items():
+        print(f"    - {field}: {value}")
+
+    # Assertions on CRM extraction
+    assert extracted.get('Name') == 'NGIRUSIO KASELE LOGIEL', f"Name mismatch: {extracted.get('Name')}"
+    assert extracted.get('ID') == '33000129', f"ID mismatch: {extracted.get('ID')}"
+    assert extracted.get('YOB') == '1987', f"YOB mismatch: {extracted.get('YOB')}"
+    assert extracted.get('MPESA') == '1250', f"MPESA mismatch: {extracted.get('MPESA')}"
+    assert extracted.get('Airtime') == '23', f"Airtime mismatch: {extracted.get('Airtime')}"
+    print("  [A] ✅ All CRM assertions passed")
+
+    # ── Test B: Inline / fallback format ──
+    inline_text = """
     name: JOHN SMITH
     id: 12345678
     yob: 1990
     msisdn: 254712345678
     mpesa bal: 500
     """
-    extracted = vetting_engine.extract_from_text(sample_text)
-    print(f"  Extracted {len(extracted)} fields from sample text:")
-    for field, value in extracted.items():
+    extracted_b = vetting_engine.extract_from_text(inline_text)
+    print(f"\n  [B] Inline format — Extracted {len(extracted_b)} fields:")
+    for field, value in extracted_b.items():
         print(f"    - {field}: {value}")
-    
+
+    # ── Test C: Edge case — commas in money, multiple balances ──
+    edge_text = """
+    First Name
+    JANE
+
+    Last Name
+    DOE
+
+    ID Number
+    12345678
+
+    D.O.B
+    15/03/1992
+
+    Fuliza Balance: 5,000.00
+    M-PESA Account Balance: 3,400.50
+    Main Balance: 100.00
+    """
+    extracted_c = vetting_engine.extract_from_text(edge_text)
+    print(f"\n  [C] Edge cases — Extracted {len(extracted_c)} fields:")
+    for field, value in extracted_c.items():
+        print(f"    - {field}: {value}")
+    assert extracted_c.get('Name') == 'JANE DOE', f"Name mismatch: {extracted_c.get('Name')}"
+    assert extracted_c.get('MPESA') == '3400', f"MPESA mismatch: {extracted_c.get('MPESA')}"
+    assert extracted_c.get('Airtime') == '100', f"Airtime mismatch: {extracted_c.get('Airtime')}"
+    print("  [C] ✅ Edge case assertions passed")
+
     validation = vetting_engine.validate(extracted, 'SIM_SWAP')
-    print(f"  Validation status: {validation['vetting_status']}")
+    print(f"\n  Validation status: {validation['vetting_status']}")
     print(f"  Complete: {validation['is_complete']}")
     
     # Test Snippet Engine
