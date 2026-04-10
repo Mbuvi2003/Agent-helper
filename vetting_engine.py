@@ -137,6 +137,12 @@ class VettingEngine:
             'fail_primary_header': ["Failed primary vetting to visit RC for pin reset."],
             'output_fields': 'PIN_OUTPUT',
         },
+        'MPESA_PIN_UNLOCK': {
+            'pass_header': ["Sub not in prison site, educated on DIY procedure and sms sent.", "M-pesa pin unlocked and vetted on:"],
+            'fail_secondary_header': ["Failed secondary vetting, advised to confirm details and call back or visit RC."],
+            'fail_primary_header': ["Failed primary vetting to visit RC for pin unlock."],
+            'output_fields': 'PIN_OUTPUT',
+        },
         'PUK': {
             'pass_header': ["Educated on DIY procedure and sms sent.", "PUK given vetted on:"],
             'fail_primary_header': ["Failed vetting, advised to visit RC for PUK."],
@@ -189,6 +195,7 @@ class VettingEngine:
     REQUIRED_BY_ISSUE = {
         'SIM_SWAP': ['Name', 'ID', 'YOB'],
         'MPESA_STARTKEY_PIN': ['Name', 'ID', 'YOB'],
+        'MPESA_PIN_UNLOCK': ['Name', 'ID', 'YOB'],
         'PUK': ['Name', 'ID', 'YOB'],
         'RESUMING_LINE': ['Name', 'ID'],
         'BONGA_PIN': ['Name', 'ID'],

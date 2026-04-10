@@ -83,7 +83,9 @@ class AgentHelperUI:
         self.vetting_result_var = tk.StringVar(value='pass')
         self.vetting_issue_code = None  # set when a vetting-flow issue is selected
         self.extracted_codes = []  # SDP codes extracted from CRM paste
+        self._last_crm_text = ''   # raw CRM text from clipboard
         self._search_after_id = None  # debounce id for live search
+        self._reversal_txn_code = ''  # M-PESA transaction code for reversals
 
         # Restore window geometry from settings (or use default)
         settings = all_data.get('settings', {})
@@ -106,6 +108,9 @@ class AgentHelperUI:
         self._history.setdefault('recent_issues', [])
         self._favorites.setdefault('favorite_issues', [])
 
+        self._compact_mode = False
+        self._full_geometry = None
+
         self._build_ui()
         self._bind_shortcuts()
         self._register_global_hotkey()
@@ -118,43 +123,53 @@ class AgentHelperUI:
 
     def _build_ui(self):
         # ── Top bar ──
-        top = ttk.Frame(self.root)
-        top.pack(side=tk.TOP, fill=tk.X, padx=10, pady=6)
+        self._top_bar = ttk.Frame(self.root)
+        self._top_bar.pack(side=tk.TOP, fill=tk.X, padx=10, pady=6)
+        top = self._top_bar
 
         ttk.Label(top, text="Agent Helper", font=("Arial", 15, "bold")).pack(side=tk.LEFT, padx=5)
         _ver_str = self.data_loader.load_json('settings.json').get('version', '')
         if _ver_str:
             ttk.Label(top, text=f"v{_ver_str}", font=("Arial", 8), foreground="gray").pack(side=tk.LEFT, padx=0)
-        ttk.Label(top, text="Issue search:", font=("Arial", 10)).pack(side=tk.LEFT, padx=10)
+
+        # Search controls (hidden in compact mode)
+        self._search_frame = ttk.Frame(top)
+        self._search_frame.pack(side=tk.LEFT)
+        ttk.Label(self._search_frame, text="Issue search:", font=("Arial", 10)).pack(side=tk.LEFT, padx=10)
         self.search_var = tk.StringVar()
-        self.search_entry = ttk.Entry(top, textvariable=self.search_var, width=30)
+        self.search_entry = ttk.Entry(self._search_frame, textvariable=self.search_var, width=30)
         self.search_entry.pack(side=tk.LEFT, padx=4)
         self.search_entry.bind("<Return>", self._on_search)
-        # Live search: debounced on every keystroke
         self.search_var.trace_add('write', self._on_search_typed)
-        ttk.Button(top, text="Search", command=self._on_search).pack(side=tk.LEFT, padx=4)
-        ttk.Button(top, text="Clear All", command=self._on_clear).pack(side=tk.LEFT, padx=4)
+        ttk.Button(self._search_frame, text="Search", command=self._on_search).pack(side=tk.LEFT, padx=4)
+        ttk.Button(self._search_frame, text="Clear All", command=self._on_clear).pack(side=tk.LEFT, padx=4)
 
-        # Calling Number (right side of top bar)
-        ttk.Separator(top, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
-        ttk.Label(top, text="Calling No:", font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=2)
+        # Calling Number (hidden in compact mode)
+        self._calling_frame = ttk.Frame(top)
+        self._calling_frame.pack(side=tk.LEFT)
+        ttk.Separator(self._calling_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
+        ttk.Label(self._calling_frame, text="Calling No:", font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=2)
         self.calling_no_var = tk.StringVar(value="—")
-        ttk.Label(top, textvariable=self.calling_no_var, font=("Consolas", 11),
+        ttk.Label(self._calling_frame, textvariable=self.calling_no_var, font=("Consolas", 11),
                   foreground="blue", width=12).pack(side=tk.LEFT, padx=2)
-        ttk.Button(top, text="Copy", command=self._copy_calling_no).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self._calling_frame, text="Copy", command=self._copy_calling_no).pack(side=tk.LEFT, padx=2)
 
         # Check for updates button (far right)
         ttk.Separator(top, orient=tk.VERTICAL).pack(side=tk.RIGHT, padx=8, fill=tk.Y)
         ttk.Button(top, text="⟳ Updates", command=self._manual_check_update).pack(side=tk.RIGHT, padx=4)
+        self._compact_btn = ttk.Button(top, text="▫ Mini", command=self._toggle_compact)
+        self._compact_btn.pack(side=tk.RIGHT, padx=4)
 
         # ── Main 3-column content ──
         body = ttk.Frame(self.root)
         body.pack(fill=tk.BOTH, expand=True, padx=10, pady=4)
+        self._body_frame = body
 
         # --- LEFT: categories + search results + guidance ---
-        left = ttk.Frame(body, width=260)
-        left.pack(side=tk.LEFT, fill=tk.BOTH, padx=4)
-        left.pack_propagate(False)
+        self._left_panel = ttk.Frame(body, width=260)
+        self._left_panel.pack(side=tk.LEFT, fill=tk.BOTH, padx=4)
+        self._left_panel.pack_propagate(False)
+        left = self._left_panel
 
         cat_frame = ttk.LabelFrame(left, text="Categories")
         cat_frame.pack(fill=tk.X, padx=2, pady=2)
@@ -197,25 +212,20 @@ class AgentHelperUI:
         self._guidance_line_map = {}  # line_number -> original guidance text
 
         # --- CENTRE: CRM paste + extracted fields ---
-        centre = ttk.Frame(body)
-        centre.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=4)
+        self._centre_panel = ttk.Frame(body)
+        self._centre_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=4)
+        centre = self._centre_panel
 
         # Issue label
         self.issue_label_var = tk.StringVar(value="No issue selected")
         ttk.Label(centre, textvariable=self.issue_label_var,
                   font=("Arial", 11, "bold")).pack(anchor=tk.W, pady=2)
 
-        # Paste CRM area
-        paste_frame = ttk.LabelFrame(centre, text="Step 1 — Paste CRM Screen Here")
-        paste_frame.pack(fill=tk.BOTH, expand=True, pady=4)
-
-        self.crm_text = scrolledtext.ScrolledText(paste_frame, height=10, wrap=tk.WORD)
-        self.crm_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
-
-        btn_row1 = ttk.Frame(paste_frame)
-        btn_row1.pack(fill=tk.X, padx=4, pady=2)
-        ttk.Button(btn_row1, text="Paste from Clipboard", command=self._on_paste_crm).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row1, text="Extract Fields", command=self._on_extract).pack(side=tk.LEFT, padx=2)
+        # Paste CRM button (reads clipboard + auto-extracts)
+        paste_frame = ttk.Frame(centre)
+        paste_frame.pack(fill=tk.X, pady=4)
+        ttk.Button(paste_frame, text="📋 Paste CRM / View 360 Data",
+                   command=self._on_paste_and_extract).pack(side=tk.LEFT, padx=4, pady=2)
 
         # Step 2: Dynamic fields area (content rebuilt per issue type)
         self.fields_frame = ttk.LabelFrame(centre, text="Step 2 — Vetting Fields")
@@ -224,9 +234,10 @@ class AgentHelperUI:
         self._build_generic_fields()
 
         # --- RIGHT: interaction output ---
-        right = ttk.Frame(body, width=400)
-        right.pack(side=tk.LEFT, fill=tk.BOTH, padx=4)
-        right.pack_propagate(False)
+        self._right_panel = ttk.Frame(body, width=400)
+        self._right_panel.pack(side=tk.LEFT, fill=tk.BOTH, padx=4)
+        self._right_panel.pack_propagate(False)
+        right = self._right_panel
 
         out_frame = ttk.LabelFrame(right, text="Step 3 — Interaction Output (copy → paste into CRM)")
         out_frame.pack(fill=tk.BOTH, expand=True, pady=4)
@@ -243,6 +254,7 @@ class AgentHelperUI:
         custom_frame.pack(fill=tk.X, padx=4, pady=2)
         ttk.Label(custom_frame, text="Extra note:").pack(side=tk.LEFT)
         self.custom_note_var = tk.StringVar()
+        self.custom_note_var.trace_add('write', lambda *_: self._on_field_changed())
         ttk.Entry(custom_frame, textvariable=self.custom_note_var, width=35).pack(side=tk.LEFT, padx=4)
 
         self.output_text = scrolledtext.ScrolledText(out_frame, height=14, wrap=tk.WORD)
@@ -250,7 +262,6 @@ class AgentHelperUI:
 
         btn_row2 = ttk.Frame(out_frame)
         btn_row2.pack(fill=tk.X, padx=4, pady=4)
-        ttk.Button(btn_row2, text="Generate Output", command=self._rebuild_output).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_row2, text="Copy Output", command=self._on_copy_output).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_row2, text="Copy Serial No", command=self._on_copy_serial).pack(side=tk.LEFT, padx=2)
         self.fav_btn = ttk.Button(btn_row2, text="★ Fav", command=self._toggle_favorite)
@@ -260,6 +271,241 @@ class AgentHelperUI:
         self.status_var = tk.StringVar(value="Ready — select an issue and paste CRM data")
         ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN).pack(
             side=tk.BOTTOM, fill=tk.X, padx=5, pady=4)
+
+    # ─── COMPACT MODE ────────────────────────────────────────────
+
+    def _toggle_compact(self):
+        if self._compact_mode:
+            self._exit_compact()
+        else:
+            self._enter_compact()
+
+    def _enter_compact(self):
+        self._compact_mode = True
+        self._full_geometry = self.root.geometry()
+
+        # Preserve current field values so they survive the mode switch
+        for key, var in self.field_entries.items():
+            val = var.get().strip()
+            if val:
+                self.extracted_fields[key] = val
+
+        # Save original widget references
+        self._full = {
+            'results_listbox': self.results_listbox,
+            'output_text': self.output_text,
+            'fav_listbox': self.fav_listbox,
+            'guidance_text': self.guidance_text,
+            'fields_frame': self.fields_frame,
+            'notes_frame': self.notes_frame,
+        }
+        if hasattr(self, 'fields_text'):
+            self._full['fields_text'] = self.fields_text
+
+        # Hide original layout
+        self._top_bar.pack_forget()
+        self._body_frame.pack_forget()
+
+        # Build compact UI (creates new widgets, swaps references)
+        self._build_compact_ui()
+
+        # Phone-sized window, snapped to left edge, full screen height
+        screen_h = self.root.winfo_screenheight() - 80
+        self.root.geometry(f"400x{screen_h}+0+0")
+        self.root.minsize(340, 500)
+
+        # Replay current state into compact widgets
+        self._refresh_fav_recent()
+        if self.search_results:
+            self._update_results()
+        if self.current_issue:
+            self._apply_selected_issue()
+            # Re-populate field values that were saved
+            if self.vetting_issue_code:
+                self._populate_vetting_entries()
+        if self._current_guidance:
+            self._filter_guidance()
+
+    def _build_compact_ui(self):
+        """Build a vertically-stacked compact UI with full functionality."""
+        # Scrollable container
+        outer = ttk.Frame(self.root)
+        outer.pack(fill=tk.BOTH, expand=True)
+        self._compact_frame = outer
+
+        canvas = tk.Canvas(outer, highlightthickness=0)
+        vsb = ttk.Scrollbar(outer, orient=tk.VERTICAL, command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        inner = ttk.Frame(canvas)
+        inner_id = canvas.create_window((0, 0), window=inner, anchor='nw')
+
+        def _on_configure(e):
+            canvas.configure(scrollregion=canvas.bbox('all'))
+        inner.bind('<Configure>', _on_configure)
+        def _on_canvas_configure(e):
+            canvas.itemconfig(inner_id, width=e.width)
+        canvas.bind('<Configure>', _on_canvas_configure)
+        # Mouse-wheel scrolling
+        def _on_mousewheel(e):
+            canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units')
+        canvas.bind_all('<MouseWheel>', _on_mousewheel)
+        self._compact_canvas = canvas
+
+        cf = inner  # shorthand
+
+        # ── Row 1: Title + Search + Pin + Full button ──
+        top = ttk.Frame(cf)
+        top.pack(fill=tk.X, padx=4, pady=(4, 2))
+        ttk.Label(top, text="Agent Helper", font=("Arial", 11, "bold")).pack(side=tk.LEFT)
+        ttk.Button(top, text="▣ Full", width=5, command=self._toggle_compact).pack(side=tk.RIGHT, padx=2)
+        self._pin_btn = ttk.Button(top, text="\U0001F4CC", width=3, command=self._toggle_pin)
+        self._pin_btn.pack(side=tk.RIGHT, padx=2)
+        se = ttk.Entry(top, textvariable=self.search_var, width=12)
+        se.pack(side=tk.RIGHT, padx=2)
+        se.bind("<Return>", self._on_search)
+        ttk.Label(top, text="\U0001F50D").pack(side=tk.RIGHT)
+
+        # ── Row 2: 3 pinned issue buttons (direct select, no extra click) ──
+        cat_row = ttk.Frame(cf)
+        cat_row.pack(fill=tk.X, padx=4, pady=2)
+        for label, code in [('SIM SWAP', 'SIM_SWAP'), ('START KEY', 'MPESA_STARTKEY_PIN'), ('REVERSAL', 'REVERSAL')]:
+            ttk.Button(cat_row, text=label,
+                       command=lambda c=code: self._select_issue_by_code(c)).pack(
+                           side=tk.LEFT, expand=True, fill=tk.X, padx=1)
+
+        # ── Row 3: Paste CRM + Calling No ──
+        paste_row = ttk.Frame(cf)
+        paste_row.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Button(paste_row, text="\U0001F4CB Paste CRM",
+                   command=self._on_paste_and_extract).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Label(paste_row, text="\U0001F4DE").pack(side=tk.LEFT)
+        ttk.Label(paste_row, textvariable=self.calling_no_var,
+                  font=("Consolas", 9), foreground="blue").pack(side=tk.LEFT, padx=2)
+        ttk.Button(paste_row, text="Copy", width=5,
+                   command=self._copy_calling_no).pack(side=tk.LEFT, padx=2)
+
+        # ── Row 4: Results + Favorites side-by-side ──
+        rf_row = ttk.Frame(cf)
+        rf_row.pack(fill=tk.X, padx=4, pady=2)
+        rf_row.columnconfigure(0, weight=1)
+        rf_row.columnconfigure(1, weight=1)
+
+        res_lf = ttk.LabelFrame(rf_row, text="Results")
+        res_lf.grid(row=0, column=0, sticky='nsew', padx=(0, 2))
+        self.results_listbox = tk.Listbox(res_lf, height=2, font=("Arial", 8))
+        self.results_listbox.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+        self.results_listbox.bind("<<ListboxSelect>>", self._on_result_select)
+
+        fav_lf = ttk.LabelFrame(rf_row, text="\u2605 Favs")
+        fav_lf.grid(row=0, column=1, sticky='nsew', padx=(2, 0))
+        self.fav_listbox = tk.Listbox(fav_lf, height=2, font=("Arial", 8))
+        self.fav_listbox.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+        self.fav_listbox.bind("<<ListboxSelect>>", self._on_fav_select)
+
+        # ── Row 5: Guidance (small) with filter ──
+        guide_lf = ttk.LabelFrame(cf, text="Guidance")
+        guide_lf.pack(fill=tk.X, padx=4, pady=2)
+        guide_filter_row = ttk.Frame(guide_lf)
+        guide_filter_row.pack(fill=tk.X, padx=2, pady=(2, 0))
+        ttk.Label(guide_filter_row, text="Filter:", font=("Arial", 7)).pack(side=tk.LEFT)
+        guide_filter = ttk.Entry(guide_filter_row, textvariable=self.guidance_filter_var, width=20)
+        guide_filter.pack(side=tk.LEFT, padx=2, fill=tk.X, expand=True)
+        self.guidance_text = scrolledtext.ScrolledText(
+            guide_lf, height=3, wrap=tk.WORD, font=("Consolas", 8), cursor="hand2")
+        self.guidance_text.pack(fill=tk.X, padx=2, pady=2)
+        self.guidance_text.bind("<Button-1>", self._on_guidance_click)
+
+        # ── Row 6: Issue label ──
+        ttk.Label(cf, textvariable=self.issue_label_var,
+                  font=("Arial", 10, "bold")).pack(anchor=tk.W, padx=4, pady=(4, 0))
+
+        # ── Row 7: Vetting Fields (MAIN area) ──
+        self.fields_frame = ttk.LabelFrame(cf, text="Vetting Fields")
+        self.fields_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=2)
+
+        # ── Row 8: Vetting Result (radio buttons) + Notes ──
+        self.notes_frame = ttk.LabelFrame(cf, text="Vetting Result")
+        self.notes_frame.pack(fill=tk.X, padx=4, pady=2)
+
+        # ── Row 9: Extra note + action buttons ──
+        act_row = ttk.Frame(cf)
+        act_row.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Label(act_row, text="Note:", font=("Arial", 8)).pack(side=tk.LEFT)
+        ttk.Entry(act_row, textvariable=self.custom_note_var, width=12).pack(side=tk.LEFT, padx=2)
+        ttk.Button(act_row, text="\U0001F4CB Serial", command=self._on_copy_serial).pack(side=tk.LEFT, padx=2)
+        ttk.Button(act_row, text="\U0001F4CB Output", command=self._on_copy_output).pack(side=tk.LEFT, padx=2)
+        ttk.Button(act_row, text="\u2605", width=2, command=self._toggle_favorite).pack(side=tk.LEFT, padx=2)
+
+        # ── Row 10: Output ──
+        out_lf = ttk.LabelFrame(cf, text="Interaction Output")
+        out_lf.pack(fill=tk.X, padx=4, pady=(2, 4))
+        self.output_text = scrolledtext.ScrolledText(
+            out_lf, height=7, wrap=tk.WORD, font=("Consolas", 8))
+        self.output_text.pack(fill=tk.X, padx=2, pady=2)
+
+    def _toggle_pin(self):
+        """Toggle always-on-top (pin) for the compact window."""
+        self._pinned = not getattr(self, '_pinned', False)
+        self.root.attributes('-topmost', self._pinned)
+        self._pin_btn.configure(text="\U0001F4CD" if self._pinned else "\U0001F4CC")
+
+    def _exit_compact(self):
+        self._compact_mode = False
+
+        # Disable pin if active
+        self._pinned = False
+        self.root.attributes('-topmost', False)
+
+        # Preserve current field values
+        for key, var in self.field_entries.items():
+            val = var.get().strip()
+            if val:
+                self.extracted_fields[key] = val
+
+        # Unbind mousewheel from compact canvas
+        try:
+            self._compact_canvas.unbind_all('<MouseWheel>')
+        except Exception:
+            pass
+
+        # Destroy compact frame
+        if hasattr(self, '_compact_frame') and self._compact_frame:
+            self._compact_frame.destroy()
+            self._compact_frame = None
+
+        # Restore original widget references
+        self.results_listbox = self._full['results_listbox']
+        self.output_text = self._full['output_text']
+        self.fav_listbox = self._full['fav_listbox']
+        self.guidance_text = self._full['guidance_text']
+        self.fields_frame = self._full['fields_frame']
+        self.notes_frame = self._full['notes_frame']
+        if 'fields_text' in self._full:
+            self.fields_text = self._full['fields_text']
+
+        # Show original layout
+        self._top_bar.pack(side=tk.TOP, fill=tk.X, padx=10, pady=6)
+        self._body_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=4)
+
+        # Restore size
+        self.root.minsize(1100, 700)
+        if self._full_geometry:
+            self.root.geometry(self._full_geometry)
+        self._compact_btn.configure(text="\u25ab Mini")
+
+        # Replay state into original widgets
+        self._refresh_fav_recent()
+        if self.search_results:
+            self._update_results()
+        if self.current_issue:
+            self._apply_selected_issue()
+            if self.vetting_issue_code:
+                self._populate_vetting_entries()
+        if self._current_guidance:
+            self._filter_guidance()
 
     # ─── KEYBOARD SHORTCUTS ──────────────────────────────────────
 
@@ -288,6 +534,14 @@ class AgentHelperUI:
         self.root.attributes('-topmost', True)
         self.root.focus_force()
         self.root.after(100, lambda: self.root.attributes('-topmost', False))
+        # If serial auto-copy is armed, fire it now (mouse-paste workflow)
+        if getattr(self, '_serial_auto_copy_armed', False):
+            self._serial_auto_copy_armed = False
+            try:
+                kb.unhook_key('v')
+            except Exception:
+                pass
+            self.root.after(100, self._auto_copy_output_after_serial)
 
     def _shortcut_paste_extract(self, event=None):
         """Ctrl+V: paste CRM data and extract in one step (unless a text widget has focus)."""
@@ -295,8 +549,7 @@ class AgentHelperUI:
         # If focus is in any Entry or Text widget, let normal paste work
         if isinstance(focused, (tk.Entry, tk.Text, ttk.Entry, scrolledtext.ScrolledText)):
             return  # let default handler run
-        self._on_paste_crm()
-        self._on_extract()
+        self._on_paste_and_extract()
         return 'break'
 
     def _shortcut_copy_output(self, event=None):
@@ -415,12 +668,18 @@ class AgentHelperUI:
              'matched_terms': 'category', 'raw_issue': i}
             for i in issues]
         self._update_results()
+        # Auto-select if only one result in category
+        if len(self.search_results) == 1:
+            self.results_listbox.selection_set(0)
+            self.current_issue = self.search_results[0]
+            self.current_raw_issue = self.current_issue.get('raw_issue', {})
+            self._apply_selected_issue()
 
     def _update_results(self):
         self.results_listbox.delete(0, tk.END)
         for r in self.search_results:
             self.results_listbox.insert(tk.END,
-                f"{r['display_name']}  [{r['confidence']}%]")
+                f"{r['display_name']}")
 
     def _on_result_select(self, event):
         sel = self.results_listbox.curselection()
@@ -514,7 +773,27 @@ class AgentHelperUI:
             var = tk.BooleanVar(value=False)
             self.note_vars.append((note_text, var))
             ttk.Checkbutton(self.notes_frame, text=note_text, variable=var,
-                            command=self._rebuild_output).pack(anchor=tk.W, padx=4, pady=1)
+                            command=(lambda v=var: self._on_note_toggle(v))).pack(anchor=tk.W, padx=4, pady=1)
+
+    def _on_note_toggle(self, toggled_var: tk.BooleanVar):
+        """Ensure only one interaction note checkbox is selected at a time.
+
+        When a checkbox is toggled on, untick all others. Then rebuild output.
+        """
+        try:
+            state = toggled_var.get()
+        except Exception:
+            state = False
+        if state:
+            # untick all other vars
+            for _, var in self.note_vars:
+                if var is not toggled_var:
+                    try:
+                        var.set(False)
+                    except Exception:
+                        pass
+        # Rebuild output to reflect new selection
+        self._rebuild_output()
 
     # ─── SIM SWAP WORKFLOW ────────────────────────────────────────
 
@@ -587,12 +866,47 @@ class AgentHelperUI:
                 row=row, column=0, sticky=tk.E, padx=(4, 4), pady=1)
             if key == 'Serial No':
                 var = self.serial_var
+                var.set('89254021')
+                serial_frame = ttk.Frame(inner)
+                serial_frame.grid(row=row, column=1, sticky=tk.W, padx=2, pady=1)
+                ttk.Entry(serial_frame, textvariable=var, width=25).pack(side=tk.LEFT)
+                self._serial_counter_var = tk.StringVar(value="8/20")
+                counter_lbl = ttk.Label(serial_frame, textvariable=self._serial_counter_var,
+                                        font=("Arial", 8))
+                counter_lbl.pack(side=tk.LEFT, padx=4)
+                def _update_serial_counter(*_):
+                    n = len(self.serial_var.get())
+                    self._serial_counter_var.set(f"{n}/20")
+                    if n == 20:
+                        counter_lbl.configure(foreground="green")
+                    elif n > 20:
+                        counter_lbl.configure(foreground="red")
+                    else:
+                        counter_lbl.configure(foreground="gray")
+                var.trace_add('write', _update_serial_counter)
+                _update_serial_counter()
             else:
                 var = tk.StringVar()
-            ttk.Entry(inner, textvariable=var, width=35).grid(
-                row=row, column=1, sticky=tk.W, padx=2, pady=1)
+                ttk.Entry(inner, textvariable=var, width=35).grid(
+                    row=row, column=1, sticky=tk.W, padx=2, pady=1)
             self.field_entries[key] = var
             row += 1
+
+        # Auto-rebuild output whenever any field changes
+        self._attach_field_traces()
+
+    def _attach_field_traces(self):
+        """Add write traces to all field entry vars so output auto-updates."""
+        self._field_trace_ids = []
+        for key, var in self.field_entries.items():
+            tid = var.trace_add('write', self._on_field_changed)
+            self._field_trace_ids.append((var, tid))
+
+    def _on_field_changed(self, *_):
+        """Debounced auto-rebuild of output when any Step 2 field changes."""
+        if hasattr(self, '_field_rebuild_id'):
+            self.root.after_cancel(self._field_rebuild_id)
+        self._field_rebuild_id = self.root.after(300, self._rebuild_output)
 
     def _build_vetting_notes(self):
         """Build vetting result radio buttons for any vetting-flow issue."""
@@ -602,19 +916,22 @@ class AgentHelperUI:
         self.notes_frame.config(text="Vetting Result")
         self.vetting_result_var.set('pass')
 
-        ttk.Radiobutton(self.notes_frame, text="Pass (all details correct)",
+        row = ttk.Frame(self.notes_frame)
+        row.pack(fill=tk.X, padx=4, pady=2)
+
+        ttk.Radiobutton(row, text="Pass",
                         variable=self.vetting_result_var, value='pass',
-                        command=self._rebuild_output).pack(anchor=tk.W, padx=4, pady=2)
+                        command=self._rebuild_output).pack(side=tk.LEFT, padx=4)
 
         config = self.vetting_engine.VETTING_CONFIGS.get(self.vetting_issue_code, {})
         if config.get('fail_secondary_header'):
-            ttk.Radiobutton(self.notes_frame, text="Fail Secondary (confirm & call back)",
+            ttk.Radiobutton(row, text="Fail Secondary",
                             variable=self.vetting_result_var, value='fail_secondary',
-                            command=self._rebuild_output).pack(anchor=tk.W, padx=4, pady=2)
+                            command=self._rebuild_output).pack(side=tk.LEFT, padx=4)
 
-        ttk.Radiobutton(self.notes_frame, text="Fail Primary (visit RC)",
+        ttk.Radiobutton(row, text="Fail Primary",
                         variable=self.vetting_result_var, value='fail_primary',
-                        command=self._rebuild_output).pack(anchor=tk.W, padx=4, pady=2)
+                        command=self._rebuild_output).pack(side=tk.LEFT, padx=4)
 
     def _populate_vetting_entries(self):
         """Fill vetting entry widgets from extracted_fields."""
@@ -634,7 +951,15 @@ class AgentHelperUI:
 
     # ─── CRM PASTE & EXTRACTION ──────────────────────────────────
 
-    def _on_paste_crm(self):
+    def _on_paste_and_extract(self):
+        """Single button: read clipboard and auto-extract vetting fields."""
+        # Disarm any pending serial auto-copy so it doesn't steal clipboard
+        self._serial_auto_copy_armed = False
+        if kb:
+            try:
+                kb.unhook_key('v')
+            except Exception:
+                pass
         try:
             text = self.root.clipboard_get()
         except tk.TclError:
@@ -643,15 +968,31 @@ class AgentHelperUI:
             else:
                 messagebox.showerror("Error", "Clipboard empty or pyperclip not installed")
                 return
-        self.crm_text.delete("1.0", tk.END)
-        self.crm_text.insert("1.0", text)
-        self._set_status("CRM data pasted — click 'Extract Fields'")
+        if not text or not text.strip():
+            messagebox.showwarning("Empty", "Clipboard is empty — copy CRM/View 360 data first")
+            return
+        self._last_crm_text = text
+        self._do_extract(text.strip())
+
+    def _on_paste_crm(self):
+        """Legacy: used by Ctrl+V shortcut."""
+        try:
+            text = self.root.clipboard_get()
+        except tk.TclError:
+            if pyperclip:
+                text = pyperclip.paste()
+            else:
+                return
+        self._last_crm_text = text
 
     def _on_extract(self):
-        raw = self.crm_text.get("1.0", tk.END).strip()
+        """Legacy: used by Ctrl+V shortcut."""
+        raw = getattr(self, '_last_crm_text', '').strip()
         if not raw:
-            messagebox.showwarning("Empty", "Paste CRM screen data first")
             return
+        self._do_extract(raw)
+
+    def _do_extract(self, raw):
         self.extracted_fields = self.vetting_engine.extract_from_text(raw)
 
         # Also extract SDP codes for issues that use CODE placeholder
@@ -717,6 +1058,9 @@ class AgentHelperUI:
     def _on_add_serial(self):
         sn = self.serial_var.get().strip()
         if sn:
+            if not sn.startswith('89254021'):
+                sn = '89254021' + sn
+                self.serial_var.set(sn)
             self.extracted_fields['Serial No'] = sn
             self._show_extracted()
             self._rebuild_output()
@@ -743,6 +1087,21 @@ class AgentHelperUI:
                         line = f"{line} {today}"
                     notes.append(line)
 
+            # For REVERSAL: grab txn code from clipboard on-demand
+            has_sr = any('SR raised' in n for n in notes)
+            issue_code = self.current_raw_issue.get('issue_code', '') if self.current_raw_issue else ''
+            if issue_code == 'REVERSAL' and notes and not has_sr:
+                # Check clipboard right now for a txn code
+                try:
+                    clip = self.root.clipboard_get().strip()
+                except Exception:
+                    clip = ''
+                if (clip and re.fullmatch(r'[A-Za-z0-9]{8,12}', clip)
+                        and re.search(r'[A-Za-z]', clip)):
+                    self._reversal_txn_code = clip.upper()
+                if self._reversal_txn_code:
+                    notes.insert(0, self._reversal_txn_code)
+
             custom = self.custom_note_var.get().strip()
             if custom:
                 notes.append(custom)
@@ -768,11 +1127,6 @@ class AgentHelperUI:
         self.output_text.delete("1.0", tk.END)
         self.output_text.insert("1.0", output)
 
-        # Auto-copy output to clipboard
-        if output.strip():
-            self._copy(output)
-            self._set_status("Output generated and auto-copied to clipboard")
-
     def _on_copy_output(self):
         text = self.output_text.get("1.0", tk.END).strip()
         if not text:
@@ -787,7 +1141,37 @@ class AgentHelperUI:
             messagebox.showwarning("Empty", "Enter a serial number first")
             return
         self._copy(sn)
-        self._set_status("Serial number copied to clipboard")
+        self._set_status("Serial copied — paste it, then output auto-copies (Ctrl+V or Win+A)")
+        # Arm auto-copy: triggers on next Ctrl+V (keyboard paste) or Win+A (bring app back)
+        if self.vetting_issue_code:
+            self._serial_auto_copy_armed = True
+            if kb:
+                try:
+                    kb.on_press_key('v', self._on_global_v_press, suppress=False)
+                except Exception:
+                    pass
+
+    def _on_global_v_press(self, event):
+        """Detect Ctrl+V globally — fire auto-copy if armed."""
+        if not getattr(self, '_serial_auto_copy_armed', False):
+            return
+        # Only trigger on Ctrl+V, not bare 'v' typing
+        import keyboard as _kb
+        if _kb.is_pressed('ctrl'):
+            self._serial_auto_copy_armed = False
+            try:
+                kb.unhook_key('v')
+            except Exception:
+                pass
+            # Small delay so the paste completes first
+            self.root.after(200, self._auto_copy_output_after_serial)
+
+    def _auto_copy_output_after_serial(self):
+        """Auto-copy full output to clipboard after serial was copied (SIM SWAP flow)."""
+        text = self.output_text.get("1.0", tk.END).strip()
+        if text:
+            self._copy(text)
+            self._set_status("Output auto-copied to clipboard — ready to paste in CRM")
 
     # ─── CALLING NUMBER ──────────────────────────────────────────
 
@@ -822,7 +1206,7 @@ class AgentHelperUI:
             text = self.root.clipboard_get().strip()
         except Exception:
             text = ""
-        if text != self._last_clipboard:
+        if text and text != self._last_clipboard:
             self._last_clipboard = text
             if re.fullmatch(r'\d{9}', text):
                 self.calling_no_var.set(text)
@@ -834,7 +1218,7 @@ class AgentHelperUI:
     def _on_clear(self):
         self.search_var.set("")
         self.results_listbox.delete(0, tk.END)
-        self.crm_text.delete("1.0", tk.END)
+        self._last_crm_text = ''
         self.output_text.delete("1.0", tk.END)
         self.serial_var.set("")
         self.custom_note_var.set("")
@@ -842,6 +1226,7 @@ class AgentHelperUI:
         self.current_raw_issue = None
         self.extracted_fields = {}
         self.extracted_codes = []
+        self._reversal_txn_code = ''
         self.calling_no_var.set("—")
         self.vetting_issue_code = None
         self.field_entries = {}

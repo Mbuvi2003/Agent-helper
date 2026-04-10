@@ -79,6 +79,28 @@
       "valid_resolutions": ["PIN_DIY_PROVIDED", "PIN_RESET_DIY", "PIN_SQ_SETUP", "PIN_DIY_FAILED", "PIN_VISIT_RC"]
     },
     {
+      "issue_code": "MPESA_PIN_UNLOCK",
+      "display_name": "M-PESA PIN Unlock",
+      "category": "MPESA",
+      "synonyms": ["pin unlock", "mpesa unlock", "unlock pin", "m-pesa unlock", "locked mpesa", "mpesa locked"],
+      "keywords": ["pin", "unlock", "locked", "mpesa", "m-pesa"],
+      "requires_vetting": true,
+      "vetting_fields": ["Name", "ID", "YOB", "MPESA", "Airtime", "Fuliza Limit", "2FDNs", "M-Shwari Limit", "Registration Date", "KCB M-PESA Limit", "2Txn", "Storo Target", "Last Bundle Purchase"],
+      "interaction_notes": [
+        "Sub not in prison site, educated on DIY procedure and sms sent.",
+        "M-pesa pin unlocked and vetted on:"
+      ],
+      "guidance": [
+        "Jambo,dial *334#>My account>Unlock m-pesa pin>ID number>Wait for confirmation message.",
+        "Sub advised to try DIY or visit RC assistance.",
+        "Line is not active on IN data, advised to top up.",
+        "Sub advised to call after 24hrs or visit Safaricom shop for assistance.",
+        "Failed vetting. Sub advised to confirm details and call back or visit RC or try DIY.",
+        "Language barrier \u2014 sub advised to call back from agent line or visit nearest Retailer/Service Centre for assistance."
+      ],
+      "valid_resolutions": ["PIN_UNLOCK_DONE", "PIN_DIY_PROVIDED", "PIN_VISIT_RC"]
+    },
+    {
       "issue_code": "PUK",
       "display_name": "PUK Code",
       "category": "LINE ISSUES",
@@ -87,6 +109,7 @@
       "requires_vetting": true,
       "vetting_fields": ["Name", "ID", "YOB"],
       "interaction_notes": [
+        "PUK issued, advised on DIY. Vetted on:",
         "Educated on DIY procedure and sms sent.",
         "PUK given vetted on:"
       ],
@@ -300,7 +323,7 @@
       "requires_vetting": true,
       "vetting_fields": ["Org Name", "Store/Till No", "Org Contact"],
       "interaction_notes": [
-        "PUK issued, Vetted on:"
+        "PUK issued, advised on DIY. Vetted on:"
       ],
       "guidance": [],
       "valid_resolutions": ["TILL_PUK_DONE", "TILL_PUK_VISIT_RC"]

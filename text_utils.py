@@ -302,10 +302,7 @@ def extract_vetting_fields_from_text(text: str) -> dict:
     if m and 'MSISDN' not in extracted:
         extracted['MSISDN'] = m.group(1)
 
-    # Serial Number from "Serial Number: 89254021034206643550"
-    m = re.search(r'Serial\s+Number\s*:\s*(\d+)', text_clean, re.I)
-    if m and 'Serial No' not in extracted:
-        extracted['Serial No'] = m.group(1)
+    # Serial No is always entered manually — never extracted from CRM
 
     # ── Fallback inline "Label: Value" patterns (financial / other pages) ──
     inline_patterns = [

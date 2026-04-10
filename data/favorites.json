@@ -1,5 +1,8 @@
 {
   "favorite_snippets": [],
   "favorite_resolutions": [],
-  "favorite_searches": []
+  "favorite_searches": [],
+  "favorite_issues": [
+    "SIM_SWAP"
+  ]
 }
