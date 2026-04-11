@@ -360,6 +360,7 @@ class AgentHelperUI:
         top = ttk.Frame(cf)
         top.pack(fill=tk.X, padx=4, pady=(4, 2))
         ttk.Label(top, text="Agent Helper", font=("Arial", 11, "bold")).pack(side=tk.LEFT)
+        ttk.Button(top, text="Clear All", width=8, command=self._on_clear).pack(side=tk.RIGHT, padx=2)
         ttk.Button(top, text="▣ Full", width=5, command=self._toggle_compact).pack(side=tk.RIGHT, padx=2)
         self._pin_btn = ttk.Button(top, text="\U0001F4CC", width=3, command=self._toggle_pin)
         self._pin_btn.pack(side=tk.RIGHT, padx=2)
@@ -691,6 +692,7 @@ class AgentHelperUI:
 
     def _apply_selected_issue(self):
         """Shared logic after an issue is selected (from results, fav, or recent)."""
+        # self._on_clear()  # (Reverted) Do not auto-clear when selecting a new issue
         name = self.current_issue['display_name']
         self.issue_label_var.set(f"Issue: {name}")
         self._set_status(f"Issue selected: {name}")
@@ -932,6 +934,12 @@ class AgentHelperUI:
         ttk.Radiobutton(row, text="Fail Primary",
                         variable=self.vetting_result_var, value='fail_primary',
                         command=self._rebuild_output).pack(side=tk.LEFT, padx=4)
+
+        # Optional: Failed Twice (shows only for issues that declare a header)
+        if config.get('failed_twice_header'):
+            ttk.Radiobutton(row, text="Failed Twice",
+                            variable=self.vetting_result_var, value='failed_twice',
+                            command=self._rebuild_output).pack(side=tk.LEFT, padx=4)
 
     def _populate_vetting_entries(self):
         """Fill vetting entry widgets from extracted_fields."""

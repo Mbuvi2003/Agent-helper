@@ -71,15 +71,9 @@ $releaseBody = @{
 } | ConvertTo-Json
 
 try {
-    $release = Invoke-RestMethod `
-        -Uri "https://api.github.com/repos/Mbuvi2003/Agent-helper/releases" `
-        -Method Post -Headers $headers -Body $releaseBody -ContentType "application/json"
+    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/Mbuvi2003/Agent-helper/releases" -Method Post -Headers $headers -Body $releaseBody -ContentType "application/json"
 
-    Invoke-RestMethod `
-        -Uri "https://uploads.github.com/repos/Mbuvi2003/Agent-helper/releases/$($release.id)/assets?name=AgentHelper.zip" `
-        -Method Post `
-        -Headers @{ Authorization = "token $token"; "Content-Type" = "application/zip" } `
-        -InFile "dist\AgentHelper.zip" | Out-Null
+    Invoke-RestMethod -Uri "https://uploads.github.com/repos/Mbuvi2003/Agent-helper/releases/$($release.id)/assets?name=AgentHelper.zip" -Method Post -Headers @{ Authorization = "token $token"; "Content-Type" = "application/zip" } -InFile "dist\AgentHelper.zip" | Out-Null
 
     Write-Host "GitHub release v$version published." -ForegroundColor Green
 } catch {
@@ -89,4 +83,5 @@ try {
 
 Write-Host "`n=== All done! ===" -ForegroundColor Green
 Write-Host "Google Drive zip : $zip" -ForegroundColor Yellow
-Write-Host "GitHub release   : https://github.com/Mbuvi2003/Agent-helper/releases/tag/v$version" -ForegroundColor Yellow
+$releaseUrl = "https://github.com/Mbuvi2003/Agent-helper/releases/tag/v$version"
+Write-Host "GitHub release   : $releaseUrl" -ForegroundColor Yellow

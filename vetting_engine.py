@@ -129,12 +129,14 @@ class VettingEngine:
             'pass_header': ["Sub not in prison site", "Sim swap done vetted on:"],
             'fail_secondary_header': ["Sub advised to confirm details and call back, vetted on:"],
             'fail_primary_header': ["Failed primary vetting to visit RC for swap"],
+            'failed_twice_header': ["Failed secondary vetting twice, to visit RC for swap"],
             'output_fields': 'SIM_SWAP_OUTPUT',
         },
         'MPESA_STARTKEY_PIN': {
             'pass_header': ["Sub not in prison site, educated on DIY procedure and sms sent.", "Sub given start-key and vetted on:"],
             'fail_secondary_header': ["Failed secondary vetting, advised to confirm details and call back or visit RC."],
             'fail_primary_header': ["Failed primary vetting to visit RC for pin reset."],
+            'failed_twice_header': ["Failed secondary vetting twice, to visit RC for start key"],
             'output_fields': 'PIN_OUTPUT',
         },
         'MPESA_PIN_UNLOCK': {
@@ -317,6 +319,17 @@ class VettingEngine:
         elif vetting_result == 'fail_secondary' and config.get('fail_secondary_header'):
             lines.extend(config['fail_secondary_header'])
             for output_label, key in output_fields:
+                val = fields.get(key, '')
+                if val:
+                    lines.append(f"{output_label}: {val}")
+
+        elif vetting_result == 'failed_twice' and config.get('failed_twice_header'):
+            # Header only at top, then blank line, then details (excluding serial no)
+            lines.extend(config['failed_twice_header'])
+            lines.append("")
+            for output_label, key in output_fields:
+                if key.lower() in ('serial no', 'serial_no', 'serialno'):
+                    continue  # skip serial for failed_twice
                 val = fields.get(key, '')
                 if val:
                     lines.append(f"{output_label}: {val}")

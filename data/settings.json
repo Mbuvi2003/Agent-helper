@@ -1,6 +1,6 @@
 {
   "app_name": "Agent Helper",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "data_folder": "data",
   "fuzzy_threshold": 70,
   "use_rapidfuzz": true,
@@ -18,5 +18,5 @@
   "copy_to_clipboard": true,
   "github_token": "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",
   "last_update_check": 1775834102.3842967,
-  "window_geometry": "1100x784+0+0"
+  "window_geometry": "400x784+0+0"
 }
