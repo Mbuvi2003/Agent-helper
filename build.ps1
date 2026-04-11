@@ -77,11 +77,8 @@ try {
 
     Write-Host "GitHub release v$version published." -ForegroundColor Green
 } catch {
-    Write-Host "GitHub release failed: $_" -ForegroundColor Red
-    Write-Host "The zip was still built — you can release manually on github.com" -ForegroundColor Yellow
+    Write-Host "GitHub release failed: $_"
+    Write-Host "The zip was still built - you can release manually on github.com"
 }
 
-Write-Host "`n=== All done! ===" -ForegroundColor Green
-Write-Host "Google Drive zip : $zip" -ForegroundColor Yellow
-$releaseUrl = "https://github.com/Mbuvi2003/Agent-helper/releases/tag/v$version"
-Write-Host "GitHub release   : $releaseUrl" -ForegroundColor Yellow
+## Removed problematic Write-Host lines at end of script (caused unterminated string error)
