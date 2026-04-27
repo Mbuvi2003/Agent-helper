@@ -242,6 +242,24 @@
       "advice": "Provide general guidance on loan terms and conditions.",
       "next_step": "Educate and advise accordingly.",
       "template_text": "Advised on loan terms and conditions. Continue using services responsibly to maintain/increase limit."
+    },
+    {
+      "resolution_code": "LINE_UNSUSPENDED",
+      "display_name": "Line Unsuspension - Vetting Passed",
+      "issue_code": "LINE_UNSUSPENSION",
+      "outcome": "approved",
+      "advice": "Line unsuspended after successful vetting.",
+      "next_step": "Advise customer to use services normally.",
+      "template_text": "Line unsuspended. Customer vetting passed. Advised to resume normal use of services."
+    },
+    {
+      "resolution_code": "LINE_UNSUSPEND_VISIT_RC",
+      "display_name": "Line Unsuspension - Visit RC",
+      "issue_code": "LINE_UNSUSPENSION",
+      "outcome": "escalated",
+      "advice": "Vetting failed. Customer directed to retail center.",
+      "next_step": "Visit RC with valid ID for unsuspension.",
+      "template_text": "Vetting failed. Advised to visit nearest Safaricom Retail Center with valid ID for line unsuspension."
     }
   ]
 }

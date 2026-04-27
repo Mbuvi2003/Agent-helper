@@ -35,6 +35,7 @@
       "requires_vetting": false,
       "vetting_fields": [],
       "interaction_notes": [
+        "Pending Authorized, within SLA advised to be patient.",
         "Reversal initiated sub advised on SLA of 2hrs educated on hakikisha.",
         "Reversal initiated sub advised on SLA of 72hrs and educated on hakikisha.",
         "Reversal initiated sub advised on SLA of 12hrs educated on hakikisha.",
@@ -232,7 +233,7 @@
       "vetting_fields": ["Name", "ID", "YOB"],
       "interaction_notes": [
         "Lost/stolen Line suspended mpesa as well sub vetted on:",
-        "Mpesa APP, Safaricom APP profile cleared."
+        "Apps cleared."
       ],
       "guidance": [],
       "valid_resolutions": ["LINE_SUSPENDED", "LINE_SUSPEND_VISIT_RC"]
@@ -344,6 +345,26 @@
         "Jambo kindly dial *234# for pin reset"
       ],
       "valid_resolutions": ["TILL_STARTKEY_DONE", "TILL_STARTKEY_VISIT_RC"]
+    },
+    {
+      "issue_code": "LINE_UNSUSPENSION",
+      "display_name": "Line Unsuspension",
+      "category": "LINE ISSUES",
+      "synonyms": ["unsuspend", "unsuspension", "unblock line", "lift suspension", "reactivate suspended"],
+      "keywords": ["unsuspend", "unsuspension", "unblock", "lift", "suspended"],
+      "requires_vetting": true,
+      "vetting_fields": ["Name", "ID", "YOB", "MPESA", "Airtime", "Fuliza Limit", "2FDNs", "M-Shwari Limit", "Registration Date", "KCB M-PESA Limit", "2Txn", "Storo Target", "Last Bundle Purchase"],
+      "interaction_notes": [
+        "Sub not in prison site",
+        "Line unsuspended, sub vetted on:"
+      ],
+      "guidance": [
+        "Verify subscriber is the rightful owner before unsuspension.",
+        "Confirm reason for original suspension (lost/stolen, fraud, voluntary).",
+        "If originally suspended for fraud, do NOT unsuspend — escalate to fraud team.",
+        "Sub advised to visit RC if vetting fails."
+      ],
+      "valid_resolutions": ["LINE_UNSUSPENDED", "LINE_UNSUSPEND_VISIT_RC"]
     }
   ]
 }

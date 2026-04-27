@@ -1,10 +1,15 @@
 """
 Text normalization and search utilities for Agent Helper.
 Provides text processing, fuzzy matching, and search ranking.
+
+Sprint 2 additions:
+  - Strict typing: Name = letters only (2-4 words); ID/YOB/money = numbers only
+  - PRS codes forced to 5+ digits
+  - Skiza tune name capture
 """
 
 import re
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from difflib import SequenceMatcher
 
 # Try to import rapidfuzz; fall back to difflib if not available
@@ -135,6 +140,36 @@ def search_snippets(query: str, snippets: List[dict], threshold: int = 70) -> Li
     # Sort by confidence (descending)
     results.sort(key=lambda x: x[1], reverse=True)
     return results
+
+# ─── STRICT TYPING HELPERS ────────────────────────────────────
+
+def _validate_name(raw: str) -> str:
+    """Validate a name: must be 2-4 space-separated words, letters/hyphens only.
+    Returns cleaned name or empty string if invalid."""
+    if not raw:
+        return ''
+    # Strip non-letter chars except spaces and hyphens
+    cleaned = re.sub(r"[^A-Za-z\s\-']", '', raw).strip()
+    # Collapse multiple spaces
+    cleaned = re.sub(r'\s+', ' ', cleaned)
+    words = cleaned.split()
+    if len(words) < 2 or len(words) > 4:
+        return ''  # reject 1-word or 5+ word "names"
+    # Each word must be at least 2 chars
+    if any(len(w) < 2 for w in words):
+        return ''
+    return cleaned
+
+
+def _validate_numeric_field(raw: str) -> str:
+    """Validate a numeric field: must contain only digits (after cleaning).
+    Returns cleaned digits-only string or empty if invalid."""
+    if not raw:
+        return ''
+    # Strip everything except digits
+    digits = re.sub(r'[^\d]', '', raw)
+    return digits if digits else ''
+
 
 def _clean_money(raw: str) -> str:
     """Clean a money string: strip commas, whitespace, currency tags → whole number."""
@@ -343,25 +378,97 @@ def extract_vetting_fields_from_text(text: str) -> dict:
     extracted = {k: v for k, v in extracted.items()
                  if v and v.strip() and v.strip() not in skip_vals}
 
+    # ── STRICT TYPING PASS (Sprint 2) ─────────────────────────────
+    # Name: must be 2-4 words, letters only
+    if 'Name' in extracted:
+        validated = _validate_name(extracted['Name'])
+        if validated:
+            extracted['Name'] = validated
+        else:
+            del extracted['Name']
+
+    # ID: digits only
+    if 'ID' in extracted:
+        validated = _validate_numeric_field(extracted['ID'])
+        if validated:
+            extracted['ID'] = validated
+        else:
+            del extracted['ID']
+
+    # YOB: must be exactly 4 digits in range 1900-2026
+    if 'YOB' in extracted:
+        yob_clean = _validate_numeric_field(extracted['YOB'])
+        if yob_clean and re.fullmatch(r'\d{4}', yob_clean):
+            yr = int(yob_clean)
+            if 1900 <= yr <= 2026:
+                extracted['YOB'] = yob_clean
+            else:
+                del extracted['YOB']
+        else:
+            del extracted['YOB']
+
+    # Numeric-only fields: MPESA, Airtime, limits, Amount
+    _NUMERIC_FIELDS = {'MPESA', 'Airtime', 'Amount', 'Fuliza Limit',
+                       'M-Shwari Limit', 'KCB M-PESA Limit'}
+    for nf in _NUMERIC_FIELDS:
+        if nf in extracted:
+            validated = _validate_numeric_field(extracted[nf])
+            if validated:
+                extracted[nf] = validated
+            else:
+                del extracted[nf]
+
     return extracted
 
 
-def extract_sdp_codes(text: str) -> List[str]:
+def extract_sdp_codes(text: str, strict_prs: bool = False) -> List[str]:
     """
     Extract SDP service codes from a pasted CRM subscriptions screen.
 
-    Looks for numeric codes (4-6 digits) at the start of product names, e.g.
+    Looks for numeric codes at the start of product names, e.g.
       23882_GamesVille_Ksh15_PerDay  →  23882
       20851_Shupavu291 for Ksh 4 per day  →  20851
 
-    Also picks up standalone codes on their own line.
+    When strict_prs=True (PRS issues), only 5-6 digit codes are accepted.
+    When strict_prs=False (Skiza/general), 4-6 digit codes are accepted.
+
     Returns a deduplicated list of code strings in order of appearance.
     """
+    min_digits = 5 if strict_prs else 4
+    pattern = rf'\b(\d{{{min_digits},6}})[_\s]'
     codes = []
     seen = set()
-    for m in re.finditer(r'\b(\d{4,6})[_\s]', text):
+    for m in re.finditer(pattern, text):
         code = m.group(1)
         if code not in seen:
             seen.add(code)
             codes.append(code)
     return codes
+
+
+def extract_skiza_tune_name(text: str) -> Optional[str]:
+    """
+    Extract the Skiza tune name from CRM subscription text.
+
+    Looks for patterns like:
+      23882_GamesVille_Ksh15_PerDay  →  "GamesVille"
+      Skiza: Niko na Safaricom  →  "Niko na Safaricom"
+      Skiza Tune - Hello World  →  "Hello World"
+
+    Returns the tune name or None if not found.
+    """
+    # Pattern 1: code_TuneName_KshNN format
+    m = re.search(r'\d{4,6}[_\s]+([A-Za-z][A-Za-z0-9_ ]+?)(?:_?Ksh|_?per|\s*$)', text, re.I)
+    if m:
+        name = m.group(1).replace('_', ' ').strip()
+        if len(name) >= 3:
+            return name
+
+    # Pattern 2: "Skiza: TuneName" or "Skiza Tune - TuneName"
+    m = re.search(r'[Ss]kiza\s*(?:[Tt]une)?\s*[:\-]\s*(.+?)(?:\s*$|\s*Ksh)', text, re.M)
+    if m:
+        name = m.group(1).strip()
+        if len(name) >= 3:
+            return name
+
+    return None

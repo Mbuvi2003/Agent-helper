@@ -6,8 +6,12 @@ Fast, offline desktop app for call center agents. Instantly identify customer is
 
 - **Issue Classification**: Instant keyword/fuzzy matching to identify customer problems
 - **Vetting Extraction**: Auto-parse customer data from pasted notes or manual forms
+- **Strict Data Typing**: Name validated as letters-only (2-4 words); ID/YOB/balances validated as numbers-only — rejects noisy CRM artifacts
 - **Resolution Engine**: Smart rule-based resolution options based on issue + vetting state
 - **Snippet Library**: One-click copy of pre-built response templates
+- **PRS/Skiza Intelligence**: PRS codes forced to 5+ digits (filters out false 4-digit matches); Skiza tune name auto-captured
+- **Sticky Calling Number**: Once detected, the calling number stays locked until you copy it or clear the session
+- **Mini-App Mode**: Phone-width window snapped to right edge with focus-based transparency
 - **Search**: Lightning-fast search on keywords, triggers, synonyms
 - **Offline**: No internet required; all data stored locally (JSON)
 - **Keyboard Hotkeys**: Faster workflow during live calls
@@ -89,21 +93,35 @@ Changes are automatically loaded on app restart.
 - **Hotkeys** (when enabled): Ctrl+1 for /simswap, Ctrl+2 for /reversal, etc.
 - **Fuzzy matching** tolerates typos: "pin rset" → "pin reset"
 - **Favorites** save your most-used snippets for instant access
+- **Calling number** auto-locks on first detection — copy it to unlock for the next caller
+- **Mini mode** (▫ Mini button) snaps to the right side and fades when you switch to CRM
+- **Switching issues** auto-clears stale data — no more ghost fields from the last call
 
-## Performance
+## Changelog
 
-- Opens in < 2 seconds on typical Windows machine
-- Search results appear in < 100ms
-- All data fits in RAM (no database, no API calls)
-- Works on slow networks or completely offline
+### v1.3.0 — Sprint 2: Advanced Vetting Engine
+- **Strict typing**: Name must be 2-4 words (letters only); ID/YOB/balances numbers-only
+- **PRS 5-digit enforcement**: 4-digit codes are no longer incorrectly captured for PRS
+- **Skiza tune name capture**: Extracted automatically from CRM paste
+- **Sticky calling number**: Locks on first detection, unlocked by Copy or Clear All
+- **Ghost-clearing**: Switching issues clears all stale output/field data
+- **Reversal redesign**: Step 2 box hidden; Pending Authorized added as checkbox
+- **Mini-App**: Right-side snap + focus-based transparency
+- **Auto-scroll**: Copy Output scrolls canvas back to top
+
+### v1.4.0 — Sprint 3+4: New Issues, Automation & Guidance Editor
+- **Line Unsuspension**: New issue type with full vetting (Pass/Fail Secondary/Fail Primary/Failed Twice)
+- **SIM Swap serial suppression**: Serial No excluded from Fail Secondary and Failed Twice output
+- **Apps cleared**: Shortened SUSPENDING_LINE footer from "Mpesa APP, Safaricom APP profile cleared." to "Apps cleared."
+- **Smart Reversal Listener**: Copy a transaction ID → press 2/12/72 → reversal output auto-copied to clipboard
+- **Win+A hotkey fix**: Replaced `keyboard` library hook with `ctypes.RegisterHotKey` for work-managed Windows
+- **Guidance Editor**: Save (💾) and Add (+) buttons on the guidance panel — saves to `user_guidance.json`
 
 ## Planned Enhancements
 
-- Hotkey support (Ctrl+1, Ctrl+2, etc. for snippets)
 - In-app snippet editing UI
-- History tracking (recent searches, copied items)
-- Favorites management
-- PyInstaller packaging into single .EXE
+- Expanded Skiza tune database
+- Agent performance metrics
 
 ## License
 

@@ -164,9 +164,16 @@ class VettingEngine:
         },
         'SUSPENDING_LINE': {
             'pass_header': ["Lost/stolen Line suspended mpesa as well sub vetted on:"],
-            'pass_footer': ["Mpesa APP, Safaricom APP profile cleared."],
+            'pass_footer': ["Apps cleared."],
             'fail_primary_header': ["Failed vetting, advised to visit RC for line suspension."],
             'output_fields': 'PUK_OUTPUT',
+        },
+        'LINE_UNSUSPENSION': {
+            'pass_header': ["Sub not in prison site", "Line unsuspended, sub vetted on:"],
+            'fail_secondary_header': ["Failed secondary vetting, advised to confirm details and call back or visit RC."],
+            'fail_primary_header': ["Failed primary vetting to visit RC for line unsuspension."],
+            'failed_twice_header': ["Failed secondary vetting twice, to visit RC for unsuspension"],
+            'output_fields': 'PIN_OUTPUT',
         },
         'MPESA_AGENT': {
             'pass_header': ["Agent vetted on:"],
@@ -202,6 +209,7 @@ class VettingEngine:
         'RESUMING_LINE': ['Name', 'ID'],
         'BONGA_PIN': ['Name', 'ID'],
         'SUSPENDING_LINE': ['Name', 'ID', 'YOB'],
+        'LINE_UNSUSPENSION': ['Name', 'ID', 'YOB'],
     }
 
     def extract_from_text(self, text: str) -> Dict:
@@ -319,6 +327,9 @@ class VettingEngine:
         elif vetting_result == 'fail_secondary' and config.get('fail_secondary_header'):
             lines.extend(config['fail_secondary_header'])
             for output_label, key in output_fields:
+                # Suppress serial number in fail_secondary output
+                if key.lower() in ('serial no', 'serial_no', 'serialno'):
+                    continue
                 val = fields.get(key, '')
                 if val:
                     lines.append(f"{output_label}: {val}")

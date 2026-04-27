@@ -21,12 +21,13 @@ Agent_helper/
 ├── requirements.txt           # Dependencies (rapidfuzz, pyperclip)
 ├── README.md                  # User guide
 └── data/
-    ├── issues.json            # 11 issue types (SIM_SWAP, REVERSAL, PIN, PUK, etc.)
+    ├── issues.json            # 12 issue types (SIM_SWAP, REVERSAL, PIN, PUK, LINE_UNSUSPENSION, etc.)
     ├── snippets.json          # 25 pre-built response templates
-    ├── resolutions.json       # 27 resolution rules & outcomes
+    ├── resolutions.json       # 29 resolution rules & outcomes
     ├── settings.json          # App configuration
     ├── history.json           # Search history tracking
-    └── favorites.json         # User favorites
+    ├── favorites.json         # User favorites
+    └── user_guidance.json     # User-edited guidance overrides (Sprint 4)
 ```
 
 ### Test Results (All Passing)
@@ -59,6 +60,7 @@ Agent_helper/
 
 ### 2. Vetting Engine
 - Auto-extraction from pasted text (regex-based)
+- **Strict typing (Sprint 2)**: Name = letters only, 2-4 words; ID/YOB = digits only; money fields = numbers only
 - Manual form field entry
 - Validation (format checking, required fields)
 - Status classification: COMPLETE, INCOMPLETE, NO_DATA, INVALID_FORMAT
@@ -80,6 +82,9 @@ Agent_helper/
 - Text normalization (lowercase, trim, dedupe spaces)
 - Fuzzy matching (rapidfuzz with difflib fallback)
 - Multi-pattern search strategy (exact > partial > synonym > fuzzy)
+- **Strict typing validators** (Sprint 2): `_validate_name`, `_validate_numeric_field`
+- **PRS strict mode** (Sprint 2): 5+ digit codes only for PRS; 4+ for Skiza/general
+- **Skiza tune name capture** (Sprint 2): regex extraction from CRM subscription text
 
 ### 6. Tkinter GUI
 - **Top area**: Search bar + Paste + Clear buttons + Status
@@ -93,6 +98,9 @@ Agent_helper/
 - **Bottom**: Status bar
 - **Real-time search**: Auto-search as user types
 - **Threading**: Non-blocking search operations
+- **Mini-App mode** (Sprint 1): Right-side snap, focus transparency, phone-width
+- **Sticky calling number** (Sprint 2): Locks on first 9-digit detection, unlocked by Copy/Clear
+- **Ghost-clearing** (Sprint 1): Switching issues auto-clears stale output/fields
 
 ### 7. Data Persistence
 - All data in JSON format (human-editable)
@@ -215,7 +223,20 @@ Changes are loaded automatically on app restart.
 - ✅ History tracking — structure in place
 - ✅ Favorites UI — backend ready
 - ✅ In-app snippet editor — can be added to UI
-- ✅ PyInstaller packaging — no code changes needed
+- ✅ PyInstaller packaging — build.ps1 ready
+- ✅ Strict typing — all vetting fields validated (Sprint 2)
+- ✅ PRS/Skiza intelligence — context-aware code extraction (Sprint 2)
+- ✅ Sticky calling number — locked on detection, unlocked on copy/clear (Sprint 2)
+- ✅ Mini-App mode — right-snap, transparency, phone-width (Sprint 1)
+- ✅ Line Unsuspension — full vetting model with Pass/Fail variants (Sprint 3)
+- ✅ Serial suppression — excluded from Fail Secondary/Failed Twice output (Sprint 3)
+- ✅ Smart Reversal Listener — txn ID → SLA keypress → auto-copy output (Sprint 4)
+- ✅ Win+A hotkey — ctypes RegisterHotKey for GPO compatibility (Sprint 4)
+- ✅ Guidance Editor — editable with Save/Add, persisted to user_guidance.json (Sprint 4)
+- ✅ Clean Slate Reset — full state wipe when switching issues, no stale data leakage (Sprint 5)
+- ✅ Smart Listener UI — auto-selects checkbox + updates output widget on SLA digit (Sprint 5)
+- ✅ Reversal Txn Code — prepends txn ID to all reversal notes incl. Pending Authorized (Sprint 5)
+- ✅ TclError Guard — serial counter callback safely handles destroyed widgets (Sprint 5)
 
 ## Deployment Notes
 

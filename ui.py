@@ -14,6 +14,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import threading
 import re
+import ctypes
+import ctypes.wintypes
 from datetime import datetime
 
 try:
@@ -31,7 +33,7 @@ from issue_engine import IssueEngine
 from vetting_engine import VettingEngine
 from resolution_engine import ResolutionEngine
 from snippet_engine import SnippetEngine
-from text_utils import extract_sdp_codes
+from text_utils import extract_sdp_codes, extract_skiza_tune_name
 from updater import check_for_update, download_and_apply
 
 
@@ -86,6 +88,13 @@ class AgentHelperUI:
         self._last_crm_text = ''   # raw CRM text from clipboard
         self._search_after_id = None  # debounce id for live search
         self._reversal_txn_code = ''  # M-PESA transaction code for reversals
+        self._calling_no_locked = False  # sticky number: once set, don't overwrite
+        self._skiza_tune_name = ''  # captured Skiza tune name from CRM paste
+        self._smart_listener_armed = False  # True when txn ID detected, waiting for SLA key
+        self._detected_txn_id = ''  # transaction ID captured by smart listener
+        self._hotkey_thread = None  # thread for ctypes RegisterHotKey
+        self._hotkey_stop = threading.Event()  # signal to stop hotkey thread
+        self._user_guidance = {}  # user-editable guidance overrides
 
         # Restore window geometry from settings (or use default)
         settings = all_data.get('settings', {})
@@ -211,6 +220,14 @@ class AgentHelperUI:
         self._current_guidance = []  # store full list for filtering
         self._guidance_line_map = {}  # line_number -> original guidance text
 
+        # Guidance editor buttons
+        guide_btn_frame = ttk.Frame(guide_frame)
+        guide_btn_frame.pack(fill=tk.X, padx=4, pady=(0, 4))
+        ttk.Button(guide_btn_frame, text="\U0001F4BE Save", width=6,
+                   command=self._save_user_guidance).pack(side=tk.LEFT, padx=2)
+        ttk.Button(guide_btn_frame, text="+ Add", width=6,
+                   command=self._add_guidance_line).pack(side=tk.LEFT, padx=2)
+
         # --- CENTRE: CRM paste + extracted fields ---
         self._centre_panel = ttk.Frame(body)
         self._centre_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=4)
@@ -309,10 +326,16 @@ class AgentHelperUI:
         # Build compact UI (creates new widgets, swaps references)
         self._build_compact_ui()
 
-        # Phone-sized window, snapped to left edge, full screen height
+        # Phone-sized window, snapped to right edge, full screen height
+        screen_w = self.root.winfo_screenwidth()
         screen_h = self.root.winfo_screenheight() - 80
-        self.root.geometry(f"400x{screen_h}+0+0")
+        self.root.geometry(f"400x{screen_h}+{screen_w - 400}+0")
         self.root.minsize(340, 500)
+
+        # Focus-based transparency: fade to 75% when app loses focus
+        self._transparency_focus_active = True
+        self.root.bind('<FocusIn>', self._on_compact_focus_in)
+        self.root.bind('<FocusOut>', self._on_compact_focus_out)
 
         # Replay current state into compact widgets
         self._refresh_fav_recent()
@@ -432,19 +455,19 @@ class AgentHelperUI:
         self.notes_frame.pack(fill=tk.X, padx=4, pady=2)
 
         # ── Row 9: Extra note + action buttons ──
-        act_row = ttk.Frame(cf)
-        act_row.pack(fill=tk.X, padx=4, pady=2)
-        ttk.Label(act_row, text="Note:", font=("Arial", 8)).pack(side=tk.LEFT)
-        ttk.Entry(act_row, textvariable=self.custom_note_var, width=12).pack(side=tk.LEFT, padx=2)
-        ttk.Button(act_row, text="\U0001F4CB Serial", command=self._on_copy_serial).pack(side=tk.LEFT, padx=2)
-        ttk.Button(act_row, text="\U0001F4CB Output", command=self._on_copy_output).pack(side=tk.LEFT, padx=2)
-        ttk.Button(act_row, text="\u2605", width=2, command=self._toggle_favorite).pack(side=tk.LEFT, padx=2)
+        self._compact_act_row = ttk.Frame(cf)
+        self._compact_act_row.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Label(self._compact_act_row, text="Note:", font=("Arial", 8)).pack(side=tk.LEFT)
+        ttk.Entry(self._compact_act_row, textvariable=self.custom_note_var, width=12).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self._compact_act_row, text="\U0001F4CB Serial", command=self._on_copy_serial).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self._compact_act_row, text="\U0001F4CB Output", command=self._on_copy_output).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self._compact_act_row, text="\u2605", width=2, command=self._toggle_favorite).pack(side=tk.LEFT, padx=2)
 
         # ── Row 10: Output ──
-        out_lf = ttk.LabelFrame(cf, text="Interaction Output")
-        out_lf.pack(fill=tk.X, padx=4, pady=(2, 4))
+        self._compact_out_lf = ttk.LabelFrame(cf, text="Interaction Output")
+        self._compact_out_lf.pack(fill=tk.X, padx=4, pady=(2, 4))
         self.output_text = scrolledtext.ScrolledText(
-            out_lf, height=7, wrap=tk.WORD, font=("Consolas", 8))
+            self._compact_out_lf, height=7, wrap=tk.WORD, font=("Consolas", 8))
         self.output_text.pack(fill=tk.X, padx=2, pady=2)
 
     def _toggle_pin(self):
@@ -471,6 +494,15 @@ class AgentHelperUI:
             self._compact_canvas.unbind_all('<MouseWheel>')
         except Exception:
             pass
+
+        # Unbind focus-based transparency and restore full opacity
+        self._transparency_focus_active = False
+        try:
+            self.root.unbind('<FocusIn>')
+            self.root.unbind('<FocusOut>')
+        except Exception:
+            pass
+        self.root.attributes('-alpha', 1.0)
 
         # Destroy compact frame
         if hasattr(self, '_compact_frame') and self._compact_frame:
@@ -518,12 +550,40 @@ class AgentHelperUI:
         self.root.bind('<Control-C>', self._shortcut_copy_output)
 
     def _register_global_hotkey(self):
-        """Register Win+A as a system-wide hotkey to bring the app to front."""
-        if kb:
+        """Register Win+A as a system-wide hotkey using ctypes RegisterHotKey.
+
+        Sprint 4: replaced keyboard library approach with ctypes for better
+        compatibility on work-managed Windows environments where the keyboard
+        hook may be blocked by GPO.
+        """
+        self._hotkey_stop.clear()
+
+        def _hotkey_loop():
+            user32 = ctypes.windll.user32
+            MOD_WIN = 0x0008
+            VK_A = 0x41
+            HOTKEY_ID = 1
             try:
-                kb.add_hotkey('win+a', self._request_bring_to_front, suppress=True)
+                if not user32.RegisterHotKey(None, HOTKEY_ID, MOD_WIN, VK_A):
+                    return  # registration failed (key combo in use)
+                msg = ctypes.wintypes.MSG()
+                while not self._hotkey_stop.is_set():
+                    # PeekMessage with PM_REMOVE; non-blocking 50ms loop
+                    if user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 1):
+                        if msg.message == 0x0312:  # WM_HOTKEY
+                            self.root.after(0, self._bring_to_front)
+                    else:
+                        self._hotkey_stop.wait(0.05)
             except Exception:
-                pass  # non-critical if it fails
+                pass
+            finally:
+                try:
+                    user32.UnregisterHotKey(None, HOTKEY_ID)
+                except Exception:
+                    pass
+
+        self._hotkey_thread = threading.Thread(target=_hotkey_loop, daemon=True)
+        self._hotkey_thread.start()
 
     def _request_bring_to_front(self):
         """Schedule bring-to-front on the Tkinter main thread."""
@@ -692,7 +752,9 @@ class AgentHelperUI:
 
     def _apply_selected_issue(self):
         """Shared logic after an issue is selected (from results, fav, or recent)."""
-        # self._on_clear()  # (Reverted) Do not auto-clear when selecting a new issue
+        # Soft-reset: clear stale output/fields from the previous issue
+        self._reset_for_new_issue()
+
         name = self.current_issue['display_name']
         self.issue_label_var.set(f"Issue: {name}")
         self._set_status(f"Issue selected: {name}")
@@ -708,17 +770,26 @@ class AgentHelperUI:
         issue_code = self.current_raw_issue.get('issue_code', '')
         if issue_code in self.vetting_engine.VETTING_CONFIGS:
             self.vetting_issue_code = issue_code
+            self._set_fields_frame_visible(True)
             self._build_vetting_fields(issue_code)
             self._build_vetting_notes()
         else:
             self.vetting_issue_code = None
             self._build_generic_fields()
             self._build_interaction_notes()
+            # REVERSAL: no vetting fields needed — hide Step 2 box
+            self._set_fields_frame_visible(issue_code != 'REVERSAL')
 
         self._rebuild_output()
 
     def _show_guidance(self):
-        self._current_guidance = self.current_raw_issue.get('guidance', [])
+        issue_code = self.current_raw_issue.get('issue_code', '')
+        # Sprint 4: check for user-edited guidance overrides
+        user_guide = self._load_user_guidance(issue_code)
+        if user_guide:
+            self._current_guidance = list(user_guide)
+        else:
+            self._current_guidance = self.current_raw_issue.get('guidance', [])
         self.guidance_filter_var.set('')
         self._filter_guidance()
 
@@ -879,12 +950,15 @@ class AgentHelperUI:
                 def _update_serial_counter(*_):
                     n = len(self.serial_var.get())
                     self._serial_counter_var.set(f"{n}/20")
-                    if n == 20:
-                        counter_lbl.configure(foreground="green")
-                    elif n > 20:
-                        counter_lbl.configure(foreground="red")
-                    else:
-                        counter_lbl.configure(foreground="gray")
+                    try:
+                        if n == 20:
+                            counter_lbl.configure(foreground="green")
+                        elif n > 20:
+                            counter_lbl.configure(foreground="red")
+                        else:
+                            counter_lbl.configure(foreground="gray")
+                    except tk.TclError:
+                        pass  # widget was destroyed during issue switch
                 var.trace_add('write', _update_serial_counter)
                 _update_serial_counter()
             else:
@@ -1003,8 +1077,16 @@ class AgentHelperUI:
     def _do_extract(self, raw):
         self.extracted_fields = self.vetting_engine.extract_from_text(raw)
 
-        # Also extract SDP codes for issues that use CODE placeholder
-        self.extracted_codes = extract_sdp_codes(raw)
+        # Determine current issue code for context-aware extraction
+        issue_code = self.current_raw_issue.get('issue_code', '') if self.current_raw_issue else ''
+
+        # Extract SDP codes: PRS requires strict 5+ digits, Skiza/general accepts 4+
+        strict = (issue_code == 'PRS')
+        self.extracted_codes = extract_sdp_codes(raw, strict_prs=strict)
+
+        # Capture Skiza tune name if on a Skiza issue
+        if issue_code == 'SKIZA':
+            self._skiza_tune_name = extract_skiza_tune_name(raw) or ''
 
         if self.vetting_issue_code:
             self._populate_vetting_entries()
@@ -1090,24 +1172,29 @@ class AgentHelperUI:
                     line = note_text
                     # Replace CODE placeholder with extracted SDP codes
                     if 'CODE' in line and self.extracted_codes:
-                        line = line.replace('CODE', ', '.join(self.extracted_codes))
+                        code_str = ', '.join(self.extracted_codes)
+                        # Append Skiza tune name if captured
+                        if self._skiza_tune_name:
+                            code_str += f' ({self._skiza_tune_name})'
+                        line = line.replace('CODE', code_str)
                     if line.rstrip().endswith(":"):
                         line = f"{line} {today}"
                     notes.append(line)
 
-            # For REVERSAL: grab txn code from clipboard on-demand
-            has_sr = any('SR raised' in n for n in notes)
+            # For REVERSAL: prepend txn code if we have one
             issue_code = self.current_raw_issue.get('issue_code', '') if self.current_raw_issue else ''
-            if issue_code == 'REVERSAL' and notes and not has_sr:
-                # Check clipboard right now for a txn code
-                try:
-                    clip = self.root.clipboard_get().strip()
-                except Exception:
-                    clip = ''
-                if (clip and re.fullmatch(r'[A-Za-z0-9]{8,12}', clip)
-                        and re.search(r'[A-Za-z]', clip)):
-                    self._reversal_txn_code = clip.upper()
-                if self._reversal_txn_code:
+            if issue_code == 'REVERSAL':
+                # Try to pick up a txn code from clipboard if we don't have one yet
+                if not self._reversal_txn_code:
+                    try:
+                        clip = self.root.clipboard_get().strip()
+                    except Exception:
+                        clip = ''
+                    if (clip and re.fullmatch(r'[A-Za-z0-9]{8,12}', clip)
+                            and re.search(r'[A-Za-z]', clip)):
+                        self._reversal_txn_code = clip.upper()
+                # Prepend txn code to output if we have one and notes are selected
+                if self._reversal_txn_code and notes:
                     notes.insert(0, self._reversal_txn_code)
 
             custom = self.custom_note_var.get().strip()
@@ -1142,6 +1229,11 @@ class AgentHelperUI:
             return
         self._copy(text)
         self._set_status("Interaction output copied to clipboard")
+        # Auto-scroll output widget back to top
+        self.output_text.yview_moveto(0.0)
+        # In compact mode also scroll the main canvas to top
+        if self._compact_mode and hasattr(self, '_compact_canvas'):
+            self._compact_canvas.yview_moveto(0.0)
 
     def _on_copy_serial(self):
         sn = self.serial_var.get().strip()
@@ -1200,25 +1292,33 @@ class AgentHelperUI:
             self._set_status("Clipboard does not contain a 9-digit number")
 
     def _copy_calling_no(self):
-        """Copy the stored calling number back to clipboard."""
+        """Copy the stored calling number back to clipboard.
+        Also unlocks the sticky number so a new one can be auto-detected.
+        """
         num = self.calling_no_var.get().strip()
         if not num or num == "—":
             self._set_status("No calling number set")
             return
         self._copy(num)
-        self._set_status(f"Calling number copied: {num}")
+        self._calling_no_locked = False
+        self._set_status(f"Calling number copied & unlocked: {num}")
 
     def _poll_clipboard(self):
-        """Poll clipboard every 500ms; auto-detect a 9-digit calling number."""
+        """Poll clipboard every 500ms; auto-detect a 9-digit calling number.
+        Sticky Number (Sprint 2): once a number is locked, don't overwrite.
+        """
         try:
             text = self.root.clipboard_get().strip()
         except Exception:
             text = ""
         if text and text != self._last_clipboard:
             self._last_clipboard = text
-            if re.fullmatch(r'\d{9}', text):
+            if re.fullmatch(r'\d{9}', text) and not self._calling_no_locked:
                 self.calling_no_var.set(text)
-                self._set_status(f"Calling number auto-detected: {text}")
+                self._calling_no_locked = True
+                self._set_status(f"Calling number locked: {text}")
+            # Smart Listener (Sprint 4): check for transaction ID
+            self._check_txn_id_clipboard(text)
         self.root.after(500, self._poll_clipboard)
 
     # ─── HELPERS ─────────────────────────────────────────────────
@@ -1236,6 +1336,11 @@ class AgentHelperUI:
         self.extracted_codes = []
         self._reversal_txn_code = ''
         self.calling_no_var.set("—")
+        self._calling_no_locked = False
+        self._smart_listener_armed = False
+        self._detected_txn_id = ''
+        self._sla_pending = ''
+        self._disarm_sla_listener()
         self.vetting_issue_code = None
         self.field_entries = {}
         self.vetting_result_var.set('pass')
@@ -1251,6 +1356,252 @@ class AgentHelperUI:
         ttk.Label(self.notes_frame, text="Select an issue to see notes",
                   foreground="gray").pack(anchor=tk.W, padx=4)
         self._set_status("Cleared")
+
+    def _reset_for_new_issue(self):
+        """Full clean-slate reset when switching issues: clears ALL previous
+        output, fields, notes, and listener state.  Keeps search results,
+        calling number, and favorites/history intact.
+        """
+        # ── Clear output widget ──
+        self.output_text.delete("1.0", tk.END)
+
+        # ── Clear all field entry StringVars ──
+        for var in self.field_entries.values():
+            try:
+                var.set('')
+            except Exception:
+                pass
+
+        # ── Clear data state ──
+        self.extracted_fields = {}
+        self.extracted_codes = []
+        self._reversal_txn_code = ''
+        self._skiza_tune_name = ''
+        self._last_crm_text = ''
+        self.serial_var.set('')
+        self.custom_note_var.set('')
+        self.vetting_result_var.set('pass')
+
+        # ── Clear interaction note checkboxes (prevents stale output) ──
+        self.note_vars = []
+        for widget in self.notes_frame.winfo_children():
+            widget.destroy()
+
+        # ── Disarm smart reversal listener ──
+        self._smart_listener_armed = False
+        self._detected_txn_id = ''
+        self._sla_pending = ''
+        self._disarm_sla_listener()
+
+    def _set_fields_frame_visible(self, visible: bool):
+        """Show or hide the Step 2 fields frame, safely maintaining pack order
+        in both full and compact layouts.
+        """
+        if visible:
+            if self._compact_mode:
+                # Re-insert fields_frame before notes/act/out widgets
+                self.notes_frame.pack_forget()
+                if hasattr(self, '_compact_act_row') and self._compact_act_row:
+                    self._compact_act_row.pack_forget()
+                if hasattr(self, '_compact_out_lf') and self._compact_out_lf:
+                    self._compact_out_lf.pack_forget()
+                self.fields_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=2)
+                self.notes_frame.pack(fill=tk.X, padx=4, pady=2)
+                if hasattr(self, '_compact_act_row') and self._compact_act_row:
+                    self._compact_act_row.pack(fill=tk.X, padx=4, pady=2)
+                if hasattr(self, '_compact_out_lf') and self._compact_out_lf:
+                    self._compact_out_lf.pack(fill=tk.X, padx=4, pady=(2, 4))
+            else:
+                self.fields_frame.pack(fill=tk.BOTH, expand=True, pady=4)
+        else:
+            self.fields_frame.pack_forget()
+
+    def _on_compact_focus_in(self, event=None):
+        """Restore full opacity when the compact window gains focus."""
+        if self._compact_mode and getattr(self, '_transparency_focus_active', False):
+            self.root.attributes('-alpha', 1.0)
+
+    def _on_compact_focus_out(self, event=None):
+        """Fade to 75% opacity when the compact window loses focus."""
+        if self._compact_mode and getattr(self, '_transparency_focus_active', False):
+            self.root.attributes('-alpha', 0.75)
+
+    # ─── SMART REVERSAL LISTENER (Sprint 4) ──────────────────────
+
+    def _check_txn_id_clipboard(self, text):
+        """Check if clipboard contains an M-PESA transaction ID (e.g. SIO3LK7Q4D).
+        If so, arm the smart listener to wait for an SLA keypress.
+        """
+        if not text:
+            return
+        # Transaction IDs: 8-12 alphanumeric, must contain at least one letter
+        if (re.fullmatch(r'[A-Za-z0-9]{8,12}', text)
+                and re.search(r'[A-Za-z]', text)):
+            txn = text.upper()
+            if txn != self._detected_txn_id:
+                self._detected_txn_id = txn
+                self._smart_listener_armed = True
+                self._reversal_txn_code = txn
+                self._set_status(f"Txn ID detected: {txn} — press 2/12/72 for SLA")
+                self._arm_sla_listener()
+
+    def _arm_sla_listener(self):
+        """Listen for SLA keypresses (2, 12, 72) using the keyboard library."""
+        if not kb:
+            return
+        try:
+            # Unhook any previous SLA listener
+            self._disarm_sla_listener()
+        except Exception:
+            pass
+
+        def _on_sla_key(event):
+            if not self._smart_listener_armed:
+                return
+            key = event.name
+            # Only listen for SLA-relevant digit keys
+            if key in ('2', '1', '7'):
+                self.root.after(0, lambda k=key: self._handle_sla_digit(k))
+
+        try:
+            self._sla_hook = kb.on_press(_on_sla_key, suppress=False)
+        except Exception:
+            pass
+
+    def _handle_sla_digit(self, digit):
+        """Accumulate SLA digits. After 500ms of no further input, finalize."""
+        if not self._smart_listener_armed:
+            return
+        # Cancel any pending finalize timer
+        if hasattr(self, '_sla_timer_id') and self._sla_timer_id:
+            self.root.after_cancel(self._sla_timer_id)
+        # Accumulate digit
+        pending = getattr(self, '_sla_pending', '')
+        self._sla_pending = pending + digit
+        # Schedule finalize after 500ms
+        self._sla_timer_id = self.root.after(500, self._finalize_sla)
+
+    def _finalize_sla(self):
+        """Finalize the SLA selection based on accumulated digits.
+        Also auto-selects the matching interaction note checkbox and
+        updates the output widget (not just clipboard).
+        """
+        if not self._smart_listener_armed:
+            return
+        pending = getattr(self, '_sla_pending', '')
+        if not pending:
+            return
+
+        # Map accumulated digits → SLA text and label
+        SLA_MAP = {
+            '2':  ("Reversal initiated sub advised on SLA of 2hrs educated on hakikisha.", "2hrs"),
+            '12': ("Reversal initiated advised on 12 hrs SLA, hakikisha sms sent.", "12hrs"),
+            '72': ("SR raised sub advised on :SLA 72hrs, educated on hakikisha.", "72hrs"),
+        }
+
+        if pending not in SLA_MAP:
+            self._sla_pending = ''
+            return
+
+        sla_text, sla_label = SLA_MAP[pending]
+
+        # Auto-select the matching checkbox in the interaction notes
+        for note_text, var in self.note_vars:
+            # Match by checking if the SLA text is (approximately) the note
+            if sla_text.lower()[:30] in note_text.lower() or note_text.lower()[:30] in sla_text.lower():
+                var.set(True)
+                # Untick all others (radio-style)
+                for other_text, other_var in self.note_vars:
+                    if other_var is not var:
+                        other_var.set(False)
+                break
+
+        # Build the full output
+        output = f"{self._detected_txn_id}\n{sla_text}"
+
+        # Update the output text widget
+        self.output_text.delete("1.0", tk.END)
+        self.output_text.insert("1.0", output)
+
+        # Copy to clipboard
+        self._copy(output)
+
+        # Disarm
+        self._smart_listener_armed = False
+        self._sla_pending = ''
+        self._disarm_sla_listener()
+        self._set_status(f"✓ Reversal output copied ({sla_label}): {self._detected_txn_id}")
+
+    def _disarm_sla_listener(self):
+        """Remove the SLA key listener."""
+        if kb and hasattr(self, '_sla_hook') and self._sla_hook:
+            try:
+                kb.unhook(self._sla_hook)
+            except Exception:
+                pass
+            self._sla_hook = None
+
+    # ─── GUIDANCE EDITOR (Sprint 4) ──────────────────────────────
+
+    def _save_user_guidance(self):
+        """Save current guidance text as user overrides to user_guidance.json."""
+        if not self.current_raw_issue:
+            self._set_status("No issue selected — nothing to save")
+            return
+
+        issue_code = self.current_raw_issue.get('issue_code', '')
+        # Read the current content from the guidance text widget
+        content = self.guidance_text.get("1.0", tk.END).strip()
+        if not content:
+            self._set_status("Guidance is empty — nothing to save")
+            return
+
+        # Parse lines back to list (strip "– " prefix)
+        lines = []
+        for line in content.split('\n'):
+            line = line.strip()
+            if line.startswith('– '):
+                line = line[2:]
+            if line:
+                lines.append(line)
+
+        # Load existing user guidance
+        user_guidance = self.data_loader.load_json('user_guidance.json')
+        if not isinstance(user_guidance, dict):
+            user_guidance = {}
+        user_guidance[issue_code] = lines
+        self.data_loader.save_json('user_guidance.json', user_guidance)
+
+        # Update in-memory guidance for this issue
+        self._current_guidance = lines
+        self._user_guidance = user_guidance
+        self._set_status(f"Guidance saved for {issue_code} ({len(lines)} items)")
+
+    def _add_guidance_line(self):
+        """Add a new guidance line via a simple dialog."""
+        if not self.current_raw_issue:
+            self._set_status("No issue selected")
+            return
+
+        # Simple input dialog
+        from tkinter import simpledialog
+        new_line = simpledialog.askstring(
+            "Add Guidance",
+            "Enter new guidance text:",
+            parent=self.root
+        )
+        if new_line and new_line.strip():
+            self._current_guidance.append(new_line.strip())
+            self._filter_guidance()
+            self._set_status(f"Guidance line added (use Save to persist)")
+
+    def _load_user_guidance(self, issue_code):
+        """Load user-edited guidance overrides for an issue, if any."""
+        if not self._user_guidance:
+            self._user_guidance = self.data_loader.load_json('user_guidance.json')
+            if not isinstance(self._user_guidance, dict):
+                self._user_guidance = {}
+        return self._user_guidance.get(issue_code, [])
 
     def _copy(self, text: str):
         try:
@@ -1371,7 +1722,10 @@ class AgentHelperUI:
 
     def _on_close(self):
         """Save state and close the application."""
-        # Unregister global hotkey
+        # Stop ctypes hotkey thread
+        self._hotkey_stop.set()
+
+        # Unregister keyboard hooks (for serial auto-copy etc)
         if kb:
             try:
                 kb.unhook_all()
