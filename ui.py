@@ -82,6 +82,8 @@ class AgentHelperUI:
         self.search_results = []
         self.note_vars = []  # dynamic checkbutton vars for interaction notes
         self.field_entries = {}  # field_key → StringVar for editable entry widgets
+        self._dropdown_win = None  # search dropdown Toplevel
+        self._dropdown_listbox = None  # Listbox inside dropdown
         self.vetting_result_var = tk.StringVar(value='pass')
         self.vetting_issue_code = None  # set when a vetting-flow issue is selected
         self.extracted_codes = []  # SDP codes extracted from CRM paste
@@ -149,8 +151,9 @@ class AgentHelperUI:
         self.search_entry = ttk.Entry(self._search_frame, textvariable=self.search_var, width=30)
         self.search_entry.pack(side=tk.LEFT, padx=4)
         self.search_entry.bind("<Return>", self._on_search)
+        self.search_entry.bind("<Escape>", lambda e: self._hide_dropdown())
+        self.search_entry.bind("<Down>", self._dropdown_focus)
         self.search_var.trace_add('write', self._on_search_typed)
-        ttk.Button(self._search_frame, text="Search", command=self._on_search).pack(side=tk.LEFT, padx=4)
         ttk.Button(self._search_frame, text="Clear All", command=self._on_clear).pack(side=tk.LEFT, padx=4)
 
         # Calling Number (hidden in compact mode)
@@ -174,7 +177,7 @@ class AgentHelperUI:
         body.pack(fill=tk.BOTH, expand=True, padx=10, pady=4)
         self._body_frame = body
 
-        # --- LEFT: categories + search results + guidance ---
+        # --- LEFT: categories + guidance (Results/Favorites removed — search uses dropdown) ---
         self._left_panel = ttk.Frame(body, width=260)
         self._left_panel.pack(side=tk.LEFT, fill=tk.BOTH, padx=4)
         self._left_panel.pack_propagate(False)
@@ -185,21 +188,6 @@ class AgentHelperUI:
         for cat in self._ordered_categories():
             ttk.Button(cat_frame, text=cat,
                        command=lambda c=cat: self._on_category(c)).pack(fill=tk.X, padx=4, pady=1)
-
-        # Favorites
-        fav_frame = ttk.LabelFrame(left, text="★ Favorites")
-        fav_frame.pack(fill=tk.X, padx=2, pady=2)
-        self.fav_listbox = tk.Listbox(fav_frame, height=3)
-        self.fav_listbox.pack(fill=tk.X, padx=4, pady=2)
-        self.fav_listbox.bind("<<ListboxSelect>>", self._on_fav_select)
-
-        self._refresh_fav_recent()
-
-        res_frame = ttk.LabelFrame(left, text="Results")
-        res_frame.pack(fill=tk.X, padx=2, pady=4)
-        self.results_listbox = tk.Listbox(res_frame, height=8)
-        self.results_listbox.pack(fill=tk.X, padx=4, pady=4)
-        self.results_listbox.bind("<<ListboxSelect>>", self._on_result_select)
 
         # Guidance panel (populated when issue selected)
         guide_frame = ttk.LabelFrame(left, text="Guidance / Instructions")
@@ -309,9 +297,7 @@ class AgentHelperUI:
 
         # Save original widget references
         self._full = {
-            'results_listbox': self.results_listbox,
             'output_text': self.output_text,
-            'fav_listbox': self.fav_listbox,
             'guidance_text': self.guidance_text,
             'fields_frame': self.fields_frame,
             'notes_frame': self.notes_frame,
@@ -338,9 +324,6 @@ class AgentHelperUI:
         self.root.bind('<FocusOut>', self._on_compact_focus_out)
 
         # Replay current state into compact widgets
-        self._refresh_fav_recent()
-        if self.search_results:
-            self._update_results()
         if self.current_issue:
             self._apply_selected_issue()
             # Re-populate field values that were saved
@@ -389,7 +372,8 @@ class AgentHelperUI:
         self._pin_btn.pack(side=tk.RIGHT, padx=2)
         se = ttk.Entry(top, textvariable=self.search_var, width=12)
         se.pack(side=tk.RIGHT, padx=2)
-        se.bind("<Return>", self._on_search)
+        se.bind("<Escape>", lambda e: self._hide_dropdown())
+        se.bind("<Down>", self._dropdown_focus)
         ttk.Label(top, text="\U0001F50D").pack(side=tk.RIGHT)
 
         # ── Row 2: 3 pinned issue buttons (direct select, no extra click) ──
@@ -411,25 +395,7 @@ class AgentHelperUI:
         ttk.Button(paste_row, text="Copy", width=5,
                    command=self._copy_calling_no).pack(side=tk.LEFT, padx=2)
 
-        # ── Row 4: Results + Favorites side-by-side ──
-        rf_row = ttk.Frame(cf)
-        rf_row.pack(fill=tk.X, padx=4, pady=2)
-        rf_row.columnconfigure(0, weight=1)
-        rf_row.columnconfigure(1, weight=1)
-
-        res_lf = ttk.LabelFrame(rf_row, text="Results")
-        res_lf.grid(row=0, column=0, sticky='nsew', padx=(0, 2))
-        self.results_listbox = tk.Listbox(res_lf, height=2, font=("Arial", 8))
-        self.results_listbox.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
-        self.results_listbox.bind("<<ListboxSelect>>", self._on_result_select)
-
-        fav_lf = ttk.LabelFrame(rf_row, text="\u2605 Favs")
-        fav_lf.grid(row=0, column=1, sticky='nsew', padx=(2, 0))
-        self.fav_listbox = tk.Listbox(fav_lf, height=2, font=("Arial", 8))
-        self.fav_listbox.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
-        self.fav_listbox.bind("<<ListboxSelect>>", self._on_fav_select)
-
-        # ── Row 5: Guidance (small) with filter ──
+        # ── Row 4: Guidance (small) with filter ──
         guide_lf = ttk.LabelFrame(cf, text="Guidance")
         guide_lf.pack(fill=tk.X, padx=4, pady=2)
         guide_filter_row = ttk.Frame(guide_lf)
@@ -510,9 +476,7 @@ class AgentHelperUI:
             self._compact_frame = None
 
         # Restore original widget references
-        self.results_listbox = self._full['results_listbox']
         self.output_text = self._full['output_text']
-        self.fav_listbox = self._full['fav_listbox']
         self.guidance_text = self._full['guidance_text']
         self.fields_frame = self._full['fields_frame']
         self.notes_frame = self._full['notes_frame']
@@ -530,9 +494,6 @@ class AgentHelperUI:
         self._compact_btn.configure(text="\u25ab Mini")
 
         # Replay state into original widgets
-        self._refresh_fav_recent()
-        if self.search_results:
-            self._update_results()
         if self.current_issue:
             self._apply_selected_issue()
             if self.vetting_issue_code:
@@ -642,12 +603,9 @@ class AgentHelperUI:
     # ─── FAVORITES / RECENT ──────────────────────────────────────
 
     def _refresh_fav_recent(self):
-        """Refresh the favorites listbox."""
-        self.fav_listbox.delete(0, tk.END)
-        for code in self._favorites.get('favorite_issues', []):
-            issue = self._find_issue_by_code(code)
-            if issue:
-                self.fav_listbox.insert(tk.END, issue.get('display_name', code))
+        """No-op: favorites are still tracked in memory/disk but there is no
+        listbox to populate (removed in Sprint 5 UI cleanup)."""
+        pass
 
     def _find_issue_by_code(self, code):
         """Find raw issue dict by issue_code."""
@@ -663,7 +621,6 @@ class AgentHelperUI:
             recent.remove(issue_code)
         recent.insert(0, issue_code)
         self._history['recent_issues'] = recent[:10]
-        self._refresh_fav_recent()
 
     def _toggle_favorite(self):
         """Toggle current issue as a favorite."""
@@ -678,15 +635,6 @@ class AgentHelperUI:
             favs.insert(0, code)
             self._set_status(f"Added to favorites")
         self._favorites['favorite_issues'] = favs
-        self._refresh_fav_recent()
-
-    def _on_fav_select(self, event):
-        sel = self.fav_listbox.curselection()
-        if not sel:
-            return
-        favs = self._favorites.get('favorite_issues', [])
-        if sel[0] < len(favs):
-            self._select_issue_by_code(favs[sel[0]])
 
     def _select_issue_by_code(self, code):
         """Programmatically select an issue by its code."""
@@ -715,7 +663,11 @@ class AgentHelperUI:
         """Debounced live search triggered on every keystroke."""
         if self._search_after_id:
             self.root.after_cancel(self._search_after_id)
-        self._search_after_id = self.root.after(300, self._on_search)
+        q = self.search_var.get().strip()
+        if not q:
+            self._hide_dropdown()
+            return
+        self._search_after_id = self.root.after(250, self._on_search)
 
     def _do_search(self, query):
         self.search_results = self.issue_engine.get_top_matches(query, limit=8)
@@ -728,27 +680,110 @@ class AgentHelperUI:
              'category': i['category'], 'confidence': 100,
              'matched_terms': 'category', 'raw_issue': i}
             for i in issues]
-        self._update_results()
         # Auto-select if only one result in category
         if len(self.search_results) == 1:
-            self.results_listbox.selection_set(0)
             self.current_issue = self.search_results[0]
             self.current_raw_issue = self.current_issue.get('raw_issue', {})
             self._apply_selected_issue()
+        else:
+            self._show_dropdown()
 
     def _update_results(self):
-        self.results_listbox.delete(0, tk.END)
-        for r in self.search_results:
-            self.results_listbox.insert(tk.END,
-                f"{r['display_name']}")
+        """Show search results in a dropdown popup below the search entry."""
+        if not self.search_results:
+            self._hide_dropdown()
+            return
+        # Auto-select if only one result
+        if len(self.search_results) == 1:
+            self._hide_dropdown()
+            self.current_issue = self.search_results[0]
+            self.current_raw_issue = self.current_issue.get('raw_issue', {})
+            self._apply_selected_issue()
+            return
+        self._show_dropdown()
 
-    def _on_result_select(self, event):
-        sel = self.results_listbox.curselection()
+    def _on_result_select(self, event=None):
+        """Handle selection from the dropdown listbox."""
+        if not self._dropdown_listbox:
+            return
+        sel = self._dropdown_listbox.curselection()
         if not sel:
             return
-        self.current_issue = self.search_results[sel[0]]
-        self.current_raw_issue = self.current_issue.get('raw_issue', {})
-        self._apply_selected_issue()
+        idx = sel[0]
+        if idx < len(self.search_results):
+            self.current_issue = self.search_results[idx]
+            self.current_raw_issue = self.current_issue.get('raw_issue', {})
+            self._hide_dropdown()
+            self._apply_selected_issue()
+
+    # ─── SEARCH DROPDOWN ───────────────────────────────────────
+
+    def _show_dropdown(self):
+        """Show (or refresh) the search results dropdown below the search entry."""
+        if not self.search_results:
+            self._hide_dropdown()
+            return
+
+        # Determine anchor widget: search_entry in full mode, or root in compact
+        anchor = self.search_entry
+
+        if self._dropdown_win is None or not self._dropdown_win.winfo_exists():
+            self._dropdown_win = tk.Toplevel(self.root)
+            self._dropdown_win.overrideredirect(True)  # no title bar
+            self._dropdown_win.attributes('-topmost', True)
+            self._dropdown_listbox = tk.Listbox(
+                self._dropdown_win, font=("Arial", 10),
+                selectmode=tk.SINGLE, activestyle='dotbox',
+                relief=tk.SOLID, borderwidth=1,
+                bg='#FFFDE7', selectbackground='#1976D2', selectforeground='white'
+            )
+            self._dropdown_listbox.pack(fill=tk.BOTH, expand=True)
+            self._dropdown_listbox.bind('<<ListboxSelect>>', self._on_result_select)
+            self._dropdown_listbox.bind('<Return>', lambda e: self._on_result_select())
+            self._dropdown_listbox.bind('<Escape>', lambda e: self._hide_dropdown())
+            # Close dropdown when clicking elsewhere
+            self.root.bind('<Button-1>', self._on_root_click, add='+')
+
+        # Populate
+        self._dropdown_listbox.delete(0, tk.END)
+        for r in self.search_results:
+            self._dropdown_listbox.insert(tk.END, r['display_name'])
+
+        # Position below anchor
+        try:
+            anchor.update_idletasks()
+            x = anchor.winfo_rootx()
+            y = anchor.winfo_rooty() + anchor.winfo_height()
+            w = max(anchor.winfo_width(), 250)
+            h = min(len(self.search_results) * 22 + 4, 220)
+            self._dropdown_win.geometry(f"{w}x{h}+{x}+{y}")
+            self._dropdown_win.deiconify()
+        except Exception:
+            pass
+
+    def _hide_dropdown(self):
+        """Hide the search dropdown popup."""
+        if self._dropdown_win and self._dropdown_win.winfo_exists():
+            self._dropdown_win.withdraw()
+
+    def _dropdown_focus(self, event=None):
+        """Move focus into the dropdown listbox (Down arrow from search entry)."""
+        if (self._dropdown_win and self._dropdown_win.winfo_exists()
+                and self._dropdown_listbox and self._dropdown_listbox.size() > 0):
+            self._dropdown_listbox.focus_set()
+            self._dropdown_listbox.selection_set(0)
+            self._dropdown_listbox.activate(0)
+            return 'break'
+
+    def _on_root_click(self, event):
+        """Close dropdown if click is outside of it."""
+        if self._dropdown_win and self._dropdown_win.winfo_exists():
+            try:
+                w = event.widget
+                if w != self._dropdown_listbox and w != self.search_entry:
+                    self._hide_dropdown()
+            except Exception:
+                pass
 
     def _apply_selected_issue(self):
         """Shared logic after an issue is selected (from results, fav, or recent)."""
@@ -1325,7 +1360,7 @@ class AgentHelperUI:
 
     def _on_clear(self):
         self.search_var.set("")
-        self.results_listbox.delete(0, tk.END)
+        self._hide_dropdown()
         self._last_crm_text = ''
         self.output_text.delete("1.0", tk.END)
         self.serial_var.set("")
