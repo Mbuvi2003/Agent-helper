@@ -109,6 +109,11 @@ Changes are automatically loaded on app restart.
 - **Mini-App**: Right-side snap + focus-based transparency
 - **Auto-scroll**: Copy Output scrolls canvas back to top
 
+### v1.7.0 — Sprint 6: Issue Editor & Streamlined UI
+- **Issue Editor**: Added an intuitive graphical editor to manage issues, categories, and vetting requirements directly within the app.
+- **Search Dropdown**: Replaced static listboxes with a clean, floating dropdown for search results.
+- **Reversal Streamlining**: Completely removed "SR raised" legacy text from Reversal 72hr SLA output.
+
 ### v1.4.0 — Sprint 3+4: New Issues, Automation & Guidance Editor
 - **Line Unsuspension**: New issue type with full vetting (Pass/Fail Secondary/Fail Primary/Failed Twice)
 - **SIM Swap serial suppression**: Serial No excluded from Fail Secondary and Failed Twice output
@@ -118,8 +123,6 @@ Changes are automatically loaded on app restart.
 - **Guidance Editor**: Save (💾) and Add (+) buttons on the guidance panel — saves to `user_guidance.json`
 
 ## Planned Enhancements
-
-- In-app snippet editing UI
 - Expanded Skiza tune database
 - Agent performance metrics
 

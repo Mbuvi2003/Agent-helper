@@ -21,7 +21,7 @@ Start-Sleep -Seconds 1
 
 # ── Build exe (--onedir: no runtime DLL extraction → no Defender issues) ──
 Write-Host "`n=== Building exe (onedir mode) ===" -ForegroundColor Cyan
-pyinstaller --onedir --windowed --name AgentHelper --hidden-import keyboard --icon images\icon.ico --add-data "images\icon.ico;images" main.py
+pyinstaller -y --onedir --windowed --name AgentHelper --hidden-import keyboard --icon images\icon.ico --add-data "images\icon.ico;images" main.py
 if ($LASTEXITCODE -ne 0) {
     Write-Host "BUILD FAILED." -ForegroundColor Red
     exit 1

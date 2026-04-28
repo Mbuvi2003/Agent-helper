@@ -169,6 +169,7 @@ class AgentHelperUI:
         # Check for updates button (far right)
         ttk.Separator(top, orient=tk.VERTICAL).pack(side=tk.RIGHT, padx=8, fill=tk.Y)
         ttk.Button(top, text="⟳ Updates", command=self._manual_check_update).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(top, text="✏️ Editor", command=self._open_issue_editor).pack(side=tk.RIGHT, padx=4)
         self._compact_btn = ttk.Button(top, text="▫ Mini", command=self._toggle_compact)
         self._compact_btn.pack(side=tk.RIGHT, padx=4)
 
@@ -1531,7 +1532,7 @@ class AgentHelperUI:
         SLA_MAP = {
             '2':  ("Reversal initiated sub advised on SLA of 2hrs educated on hakikisha.", "2hrs"),
             '12': ("Reversal initiated advised on 12 hrs SLA, hakikisha sms sent.", "12hrs"),
-            '72': ("SR raised sub advised on :SLA 72hrs, educated on hakikisha.", "72hrs"),
+            '72': ("Reversal initiated sub advised on SLA of 72hrs and educated on hakikisha.", "72hrs"),
         }
 
         if pending not in SLA_MAP:
@@ -1778,6 +1779,23 @@ class AgentHelperUI:
         self.data_loader.save_json('favorites.json', self._favorites)
 
         self.root.destroy()
+
+    def _open_issue_editor(self):
+        """Open the graphical Issue Editor."""
+        try:
+            from editor_ui import IssueEditorUI
+        except ImportError:
+            messagebox.showerror("Error", "Issue Editor module not found.")
+            return
+
+        def on_saved():
+            self._set_status("Reloading issues...")
+            issues_raw = self.data_loader.load_json('issues.json')
+            self.issue_engine.issues = issues_raw.get('issues', []) if isinstance(issues_raw, dict) else issues_raw
+            messagebox.showinfo("Success", "Issues saved successfully. If you added a new Category, please restart the app to see it.")
+            self._on_clear()
+
+        IssueEditorUI(self.root, self.data_loader, on_saved)
 
 
 def main():
