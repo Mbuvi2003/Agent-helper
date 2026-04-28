@@ -34,7 +34,6 @@ from vetting_engine import VettingEngine
 from resolution_engine import ResolutionEngine
 from snippet_engine import SnippetEngine
 from text_utils import extract_sdp_codes, extract_skiza_tune_name
-from updater import check_for_update, download_and_apply
 
 
 # Preferred category display order (most frequent first).
@@ -128,7 +127,6 @@ class AgentHelperUI:
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self._last_clipboard = ""  # for clipboard polling
         self._poll_clipboard()
-        self._check_update_async()
 
     # ─── UI BUILD ────────────────────────────────────────────────
 
@@ -166,9 +164,8 @@ class AgentHelperUI:
                   foreground="blue", width=12).pack(side=tk.LEFT, padx=2)
         ttk.Button(self._calling_frame, text="Copy", command=self._copy_calling_no).pack(side=tk.LEFT, padx=2)
 
-        # Check for updates button (far right)
+        # Editor button (far right)
         ttk.Separator(top, orient=tk.VERTICAL).pack(side=tk.RIGHT, padx=8, fill=tk.Y)
-        ttk.Button(top, text="⟳ Updates", command=self._manual_check_update).pack(side=tk.RIGHT, padx=4)
         ttk.Button(top, text="✏️ Editor", command=self._open_issue_editor).pack(side=tk.RIGHT, padx=4)
         self._compact_btn = ttk.Button(top, text="▫ Mini", command=self._toggle_compact)
         self._compact_btn.pack(side=tk.RIGHT, padx=4)
@@ -1652,109 +1649,7 @@ class AgentHelperUI:
     def _set_status(self, msg: str):
         self.status_var.set(msg)
 
-    # ─── AUTO-UPDATE ─────────────────────────────────────────────
 
-    def _manual_check_update(self):
-        """Triggered by the Updates button — always checks, ignores 24h throttle."""
-        self._set_status("Checking for updates...")
-        def _run():
-            try:
-                settings = self.data_loader.load_json('settings.json')
-                token = settings.get('github_token', '')
-                result = check_for_update(token)
-                if result.get('available'):
-                    self.root.after(0, lambda: self._prompt_update(result))
-                elif result.get('error') == 'offline':
-                    self.root.after(0, lambda: (
-                        self._set_status("No internet connection."),
-                        messagebox.showwarning("Updates", "Could not reach GitHub.\nCheck your internet connection."),
-                    ))
-                elif result.get('error') == 'auth':
-                    self.root.after(0, lambda: (
-                        self._set_status("Update check failed: invalid token."),
-                        messagebox.showerror("Updates", "GitHub token is invalid or expired.\nContact your administrator to get a fresh copy of the app."),
-                    ))
-                elif result.get('error') == 'notfound':
-                    self.root.after(0, lambda: (
-                        self._set_status("No releases found."),
-                        messagebox.showinfo("Updates", "No releases found on GitHub yet."),
-                    ))
-                elif result.get('error'):
-                    err = result['error']
-                    self.root.after(0, lambda: (
-                        self._set_status(f"Update check error: {err}"),
-                        messagebox.showerror("Updates", f"Update check failed:\n{err}"),
-                    ))
-                else:
-                    self.root.after(0, lambda: (
-                        self._set_status("You're up to date."),
-                        messagebox.showinfo("Updates", "You're already on the latest version."),
-                    ))
-            except Exception as e:
-                self.root.after(0, lambda: self._set_status(f"Update check failed: {e}"))
-        threading.Thread(target=_run, daemon=True).start()
-
-    def _check_update_async(self):
-        """Run update check in background thread, at most once every 24 hours."""
-        def _run():
-            try:
-                import time
-                settings = self.data_loader.load_json('settings.json')
-                if not settings:  # guard: never overwrite with an empty dict
-                    return
-                last = settings.get('last_update_check', 0)
-                if time.time() - last < 86400:
-                    return  # checked within the last 24 hours, skip
-                token = settings.get('github_token', '')
-                result = check_for_update(token)
-                # Save ONLY the timestamp key — don't risk losing other keys
-                settings['last_update_check'] = time.time()
-                self.data_loader.save_json('settings.json', settings)
-                if result.get('available'):
-                    self.root.after(0, lambda: self._prompt_update(result))
-            except Exception:
-                pass
-        threading.Thread(target=_run, daemon=True).start()
-
-    def _prompt_update(self, result):
-        """Show update dialog and download if user agrees."""
-        ver = result.get('latest_version', '')
-        notes = result.get('notes', '').strip()
-        msg = f"Version {ver} is available.\n\nDownload and install now?"
-        if notes:
-            msg += f"\n\nRelease notes:\n{notes[:300]}"
-        if not messagebox.askyesno("Update Available", msg):
-            return
-        url = result.get('download_url', '')
-        dl_name = result.get('download_name', '')
-        dl_size = result.get('download_size', 0)
-        if not url:
-            messagebox.showerror("Update", "No download link found in release.")
-            return
-        self._set_status("Downloading update...")
-        settings = self.data_loader.load_json('settings.json')
-        token = settings.get('github_token', '')
-
-        def _progress(done, total):
-            pct = int(done / total * 100)
-            self.root.after(0, lambda: self._set_status(f"Downloading update... {pct}%"))
-
-        def _do_download():
-            ok, err = download_and_apply(url, token, _progress,
-                                          expected_size=dl_size,
-                                          download_name=dl_name)
-            if ok:
-                self.root.after(0, lambda: (
-                    self._set_status("Update ready. Restarting..."),
-                    self.root.after(1500, self._on_close),
-                ))
-            else:
-                _err = err
-                self.root.after(0, lambda: (
-                    self._set_status("Update download failed."),
-                    messagebox.showerror("Update", f"Download failed:\n{_err}"),
-                ))
-        threading.Thread(target=_do_download, daemon=True).start()
 
     def _on_close(self):
         """Save state and close the application."""
@@ -1799,16 +1694,8 @@ class AgentHelperUI:
 
 
 def main():
-    import sys
-    was_updated = '--updated' in sys.argv
-
     root = tk.Tk()
     app = AgentHelperUI(root)
-    if was_updated:
-        root.after(800, lambda: messagebox.showinfo(
-            "Update Complete",
-            f"Successfully updated to v{app.data_loader.load_json('settings.json').get('version', '')}!"
-        ))
     root.mainloop()
 
 
