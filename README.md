@@ -109,6 +109,9 @@ Changes are automatically loaded on app restart.
 - **Mini-App**: Right-side snap + focus-based transparency
 - **Auto-scroll**: Copy Output scrolls canvas back to top
 
+### v1.7.1 — Privacy Policy Update
+- **Privacy Policy**: Added an official Privacy and Data Handling Policy to clarify the app's offline-first architecture and compliance guidelines.
+
 ### v1.7.0 — Sprint 6: Issue Editor & Streamlined UI
 - **Issue Editor**: Added an intuitive graphical editor to manage issues, categories, and vetting requirements directly within the app.
 - **Search Dropdown**: Replaced static listboxes with a clean, floating dropdown for search results.
@@ -125,6 +128,9 @@ Changes are automatically loaded on app restart.
 ## Planned Enhancements
 - Expanded Skiza tune database
 - Agent performance metrics
+
+## Privacy Policy
+See the [Privacy and Data Handling Policy](PRIVACY_POLICY.md) for details on how this app operates securely offline.
 
 ## License
 
