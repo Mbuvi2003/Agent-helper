@@ -1,0 +1,20 @@
+SIM SWAP GUIDE
+Goal: Extract ID and Serial Number instantly to verify ownership.
+
+1. THE SETUP
+--------------------------------------------------
+* Press [Alt + Space] to open Agent Helper.
+* Type: 'sim swap' or select the SIM SWAP category on the left.
+
+2. THE EXTRACTION (No Manual Typing!)
+--------------------------------------------------
+* Go to your CRM and copy the whole View 360 page (Ctrl + C).
+* Click 'Paste CRM' in Agent Helper. 
+* Magic: The app instantly pulls the Name, ID, YOB, M-PESA balance, and Airtime balance.
+
+3. THE RESOLUTION
+--------------------------------------------------
+* Look at the Vetting Status Box.
+* If COMPLETE (Green): Click the "Vetting Passed" resolution -> Click Copy All.
+* If INCOMPLETE (Red): Click the "Failed Vetting" resolution -> Click Copy All.
+* Paste into your CRM and close the call!

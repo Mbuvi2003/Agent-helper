@@ -16,19 +16,24 @@ Fast, offline desktop app for call center agents. Instantly identify customer is
 - **Offline**: No internet required; all data stored locally (JSON)
 - **Keyboard Hotkeys**: Faster workflow during live calls
 
-## Quick Start
+## Deployment & Installation
 
-### 1. Install dependencies:
+### Official Production Release (MSIX & Microsoft Store)
+Agent Helper is packaged as a secure, sandboxed **MSIX bundle** distributed via the **Microsoft Store**. This is the official production deployment path to facilitate:
+- Clean, sandboxed installations without leaving registry debris.
+- Seamless, silent auto-updates.
+- Full compliance with enterprise centralized deployment tools (like MECM/Intune).
+
+### Developer / Local Testing
+If you are developing locally, you can run the application directly via Python:
 ```bash
 pip install -r requirements.txt
-```
-
-### 2. Run the app:
-```bash
 python main.py
 ```
+*(Note: PyInstaller can be used to generate a standalone `.exe` for local testing, but MSIX is the official production standard).*
 
-### 3. Use the app:
+## Usage
+
 - **Type or paste** a customer issue in the search bar
 - **Click a category** on the left to filter issues
 - **Select an issue** from results to view details
@@ -99,16 +104,6 @@ Changes are automatically loaded on app restart.
 
 ## Changelog
 
-### v1.3.0 — Sprint 2: Advanced Vetting Engine
-- **Strict typing**: Name must be 2-4 words (letters only); ID/YOB/balances numbers-only
-- **PRS 5-digit enforcement**: 4-digit codes are no longer incorrectly captured for PRS
-- **Skiza tune name capture**: Extracted automatically from CRM paste
-- **Sticky calling number**: Locks on first detection, unlocked by Copy or Clear All
-- **Ghost-clearing**: Switching issues clears all stale output/field data
-- **Reversal redesign**: Step 2 box hidden; Pending Authorized added as checkbox
-- **Mini-App**: Right-side snap + focus-based transparency
-- **Auto-scroll**: Copy Output scrolls canvas back to top
-
 ### v1.7.1 — Privacy Policy Update
 - **Privacy Policy**: Added an official Privacy and Data Handling Policy to clarify the app's offline-first architecture and compliance guidelines.
 
@@ -122,8 +117,18 @@ Changes are automatically loaded on app restart.
 - **SIM Swap serial suppression**: Serial No excluded from Fail Secondary and Failed Twice output
 - **Apps cleared**: Shortened SUSPENDING_LINE footer from "Mpesa APP, Safaricom APP profile cleared." to "Apps cleared."
 - **Smart Reversal Listener**: Copy a transaction ID → press 2/12/72 → reversal output auto-copied to clipboard
-- **Win+A hotkey fix**: Replaced `keyboard` library hook with `ctypes.RegisterHotKey` for work-managed Windows
+- **Global Hotkey Architecture**: Migrated from OS-bound Windows key hooks to a clean Alt + Space listener to ensure zero conflict with OS-level Group Policies (GPOs) and Action Center bindings in corporate environments.
 - **Guidance Editor**: Save (💾) and Add (+) buttons on the guidance panel — saves to `user_guidance.json`
+
+### v1.3.0 — Sprint 2: Advanced Vetting Engine
+- **Strict typing**: Name must be 2-4 words (letters only); ID/YOB/balances numbers-only
+- **PRS 5-digit enforcement**: 4-digit codes are no longer incorrectly captured for PRS
+- **Skiza tune name capture**: Extracted automatically from CRM paste
+- **Sticky calling number**: Locks on first detection, unlocked by Copy or Clear All
+- **Ghost-clearing**: Switching issues clears all stale output/field data
+- **Reversal redesign**: Step 2 box hidden; Pending Authorized added as checkbox
+- **Mini-App**: Right-side snap + focus-based transparency
+- **Auto-scroll**: Copy Output scrolls canvas back to top
 
 ## Planned Enhancements
 - Expanded Skiza tune database

@@ -611,7 +611,7 @@
       "requires_vetting": false,
       "vetting_fields": [],
       "interaction_notes": [
-        "Sub was being billed on PRS code - CODE. Deleted and advised on DIY by dialing *100#."
+        "Codes removed: CODE. Deleted and advised on DIY by dialing *100#."
       ],
       "guidance": [
         "Dial *811# or *100# and go to my subscriptions to check for any active subscriptions and deactivate.",
@@ -797,6 +797,154 @@
         "LINE_UNSUSPENDED",
         "LINE_UNSUSPEND_VISIT_RC"
       ]
+    },
+    {
+      "issue_code": "GENERAL",
+      "display_name": "General Snippets",
+      "category": "GENERAL",
+      "synonyms": [
+        "general snippets",
+        "guidance"
+      ],
+      "keywords": [
+        "general"
+      ],
+      "requires_vetting": false,
+      "vetting_fields": [],
+      "interaction_notes": [],
+      "guidance": [],
+      "valid_resolutions": []
+    },
+    {
+      "issue_code": "MPESA",
+      "display_name": "M-PESA Snippets",
+      "category": "MPESA",
+      "synonyms": [
+        "mpesa snippets"
+      ],
+      "keywords": [
+        "mpesa",
+        "snippets"
+      ],
+      "requires_vetting": false,
+      "vetting_fields": [],
+      "interaction_notes": [],
+      "guidance": [],
+      "valid_resolutions": []
+    },
+    {
+      "issue_code": "FULIZA",
+      "display_name": "FULIZA",
+      "category": "MPESA",
+      "synonyms": [
+        "fuliza"
+      ],
+      "keywords": [
+        "fuliza"
+      ],
+      "requires_vetting": true,
+      "vetting_fields": [
+        "Name",
+        "ID",
+        "YOB"
+      ],
+      "interaction_notes": [
+        "Pass \u2014 action done, vetted on:"
+      ],
+      "interaction_template": "Fuliza reset advised on DIY",
+      "guidance": [
+        "Loan overdue advised to clear loan"
+      ],
+      "valid_resolutions": []
+    },
+    {
+      "issue_code": "FUKIKI",
+      "display_name": "fukiki",
+      "category": "GENERAL",
+      "synonyms": [
+        "fukiki"
+      ],
+      "keywords": [
+        "fukiki"
+      ],
+      "requires_vetting": true,
+      "vetting_fields": [
+        "Name",
+        "ID",
+        "YOB",
+        "MPESA",
+        "Airtime",
+        "Fuliza Limit",
+        "M-Shwari Limit",
+        "2FDNs",
+        "Registration Date",
+        "KCB M-PESA Limit",
+        "2Txn",
+        "Storo Target",
+        "Last Bundle Purchase"
+      ],
+      "interaction_notes": [
+        "Pass \u2014 action done, vetted on:",
+        "Fail Secondary \u2014 advise to confirm & call back",
+        "Fail Primary \u2014 advise to visit RC",
+        "Failed Twice \u2014 visit RC (escalated)"
+      ],
+      "interaction_template": "Sub fulizad advised on LU\n[VETTING]",
+      "guidance": [
+        "Good job"
+      ],
+      "valid_resolutions": []
+    },
+    {
+      "issue_code": "SHIRIKI_PAY",
+      "display_name": "SHIRIKI PAY",
+      "category": "MPESA",
+      "synonyms": [
+        "shiriki pay"
+      ],
+      "keywords": [
+        "shiriki",
+        "pay"
+      ],
+      "requires_vetting": true,
+      "vetting_fields": [
+        "Name",
+        "ID",
+        "YOB"
+      ],
+      "interaction_notes": [
+        "Pass \u2014 action done, vetted on:",
+        "Fail Primary \u2014 advise to visit RC"
+      ],
+      "guidance": [
+        "DIY"
+      ],
+      "valid_resolutions": []
+    },
+    {
+      "issue_code": "ZIIDI",
+      "display_name": "ziidi",
+      "category": "GENERAL",
+      "synonyms": [
+        "ziidi"
+      ],
+      "keywords": [
+        "ziidi"
+      ],
+      "requires_vetting": true,
+      "vetting_fields": [
+        "Name",
+        "ID",
+        "YOB"
+      ],
+      "interaction_notes": [
+        "Pass \u2014 action done, vetted on:",
+        "Fail Secondary \u2014 advise to confirm & call back",
+        "Fail Primary \u2014 advise to visit RC",
+        "Failed Twice \u2014 visit RC (escalated)"
+      ],
+      "guidance": [],
+      "valid_resolutions": []
     }
   ]
 }

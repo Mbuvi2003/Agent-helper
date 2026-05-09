@@ -110,14 +110,13 @@ Agent_helper/
 
 ## How to Run
 
-### Setup (First Time Only)
+### Official Production Release (MSIX)
+Agent Helper is packaged as an MSIX bundle for the Microsoft Store. This is the official deployment method for production to ensure secure sandboxing and compliance with enterprise device management (MECM/Intune).
+
+### Developer Setup (Local Source)
 ```bash
 cd C:\Users\PC\Documents\Agent_helper
 pip install -r requirements.txt
-```
-
-### Run the App
-```bash
 python main.py
 ```
 
@@ -219,7 +218,6 @@ Changes are loaded automatically on app restart.
 
 ## What's Ready for Enhancement
 
-- ✅ Hotkeys (Ctrl+1 for /simswap, etc.) — framework ready
 - ✅ History tracking — structure in place
 - ✅ Favorites UI — backend ready
 - ✅ In-app snippet editor — can be added to UI
@@ -231,7 +229,7 @@ Changes are loaded automatically on app restart.
 - ✅ Line Unsuspension — full vetting model with Pass/Fail variants (Sprint 3)
 - ✅ Serial suppression — excluded from Fail Secondary/Failed Twice output (Sprint 3)
 - ✅ Smart Reversal Listener — txn ID → SLA keypress → auto-copy output (Sprint 4)
-- ✅ Win+A hotkey — ctypes RegisterHotKey for GPO compatibility (Sprint 4)
+- ✅ Global Hotkey Architecture — Migrated from OS-bound Windows key hooks to a clean Alt + Space listener to ensure zero conflict with OS-level Group Policies (GPOs) and Action Center bindings in corporate environments. (Sprint 4)
 - ✅ Guidance Editor — editable with Save/Add, persisted to user_guidance.json (Sprint 4)
 - ✅ Clean Slate Reset — full state wipe when switching issues, no stale data leakage (Sprint 5)
 - ✅ Smart Listener UI — auto-selects checkbox + updates output widget on SLA digit (Sprint 5)
@@ -240,14 +238,20 @@ Changes are loaded automatically on app restart.
 
 ## Deployment Notes
 
-### Single EXE (Standalone)
-To package as a single .EXE for distribution:
+### Official Production Release (MSIX & Microsoft Store)
+Agent Helper is packaged as a secure, sandboxed **MSIX bundle** distributed via the **Microsoft Store**. This is the official production deployment path to facilitate:
+- Clean, sandboxed installations.
+- Seamless auto-updates.
+- Compliance with enterprise centralized deployment tools (like MECM/Intune).
+
+### Developer / Local Testing (PyInstaller)
+For local testing or development, you can still package the app as a standalone `.exe`:
 ```bash
 pip install pyinstaller
 pyinstaller --onefile --windowed main.py
 ```
 
-This creates `dist/main.exe` that can run on any Windows machine without Python installed.
+This creates `dist/main.exe` for quick local validation without requiring Python on the target machine. Note that the MSIX bundle remains the required standard for production rollout.
 
 ---
 

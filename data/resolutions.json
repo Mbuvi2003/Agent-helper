@@ -260,6 +260,100 @@
       "advice": "Vetting failed. Customer directed to retail center.",
       "next_step": "Visit RC with valid ID for unsuspension.",
       "template_text": "Vetting failed. Advised to visit nearest Safaricom Retail Center with valid ID for line unsuspension."
+    },
+    {
+      "resolution_code": "FUKIKI_PASS",
+      "display_name": "fukiki - Pass",
+      "issue_code": "FUKIKI",
+      "outcome": "approved",
+      "advice": "Action completed. Customer vetting passed.",
+      "next_step": "",
+      "template_text": "Sub fulizad advised on LU\n[VETTING]"
+    },
+    {
+      "resolution_code": "FUKIKI_FAIL2",
+      "display_name": "fukiki - Fail Secondary",
+      "issue_code": "FUKIKI",
+      "outcome": "escalated",
+      "advice": "Vetting failed secondary. Advised to confirm & call back.",
+      "next_step": "",
+      "template_text": "Sub fulizad advised on LU\n[VETTING]"
+    },
+    {
+      "resolution_code": "FUKIKI_FAIL1",
+      "display_name": "fukiki - Fail Primary",
+      "issue_code": "FUKIKI",
+      "outcome": "escalated",
+      "advice": "Vetting failed. Advised to visit Retail Center with valid ID.",
+      "next_step": "",
+      "template_text": "Sub fulizad advised on LU\n[VETTING]"
+    },
+    {
+      "resolution_code": "FUKIKI_FAIL_2X",
+      "display_name": "fukiki - Failed Twice",
+      "issue_code": "FUKIKI",
+      "outcome": "escalated",
+      "advice": "Failed twice. Directed to Retail Center.",
+      "next_step": "",
+      "template_text": "Sub fulizad advised on LU\n[VETTING]"
+    },
+    {
+      "resolution_code": "SHIRIKI_PAY_PASS",
+      "display_name": "SHIRIKI PAY - Vetting Passed",
+      "issue_code": "SHIRIKI_PAY",
+      "outcome": "approved",
+      "advice": "Shiriki pay beneficiary removed sub vetted on:",
+      "next_step": "",
+      "template_text": "Shiriki pay beneficiary removed sub vetted on:"
+    },
+    {
+      "resolution_code": "SHIRIKI_PAY_FAIL1",
+      "display_name": "SHIRIKI PAY - Fail Primary",
+      "issue_code": "SHIRIKI_PAY",
+      "outcome": "escalated",
+      "advice": "Vetting failed. Sub advised to visit nearest Retail Center with valid ID.",
+      "next_step": "",
+      "template_text": "Vetting failed. Sub advised to visit nearest Retail Center with valid ID."
+    },
+    {
+      "resolution_code": "ZIIDI_PASS",
+      "display_name": "ziidi - Vetting Passed",
+      "issue_code": "ZIIDI",
+      "outcome": "approved",
+      "advice": "",
+      "next_step": "",
+      "template_text": "",
+      "append_vetting": true
+    },
+    {
+      "resolution_code": "ZIIDI_FAIL2",
+      "display_name": "ziidi - Fail Secondary",
+      "issue_code": "ZIIDI",
+      "outcome": "escalated",
+      "advice": "Vetting failed secondary. Sub advised to confirm details and call back.",
+      "next_step": "",
+      "template_text": "Vetting failed secondary. Sub advised to confirm details and call back.",
+      "append_vetting": true
+    },
+    {
+      "resolution_code": "ZIIDI_FAIL1",
+      "display_name": "ziidi - Fail Primary",
+      "issue_code": "ZIIDI",
+      "outcome": "escalated",
+      "advice": "Vetting failed. Sub advised to visit nearest Retail Center with valid ID.",
+      "next_step": "",
+      "template_text": "Vetting failed. Sub advised to visit nearest Retail Center with valid ID.",
+      "append_vetting": true
+    },
+    {
+      "resolution_code": "ZIIDI_FAIL_2X",
+      "display_name": "ziidi - Failed Twice",
+      "issue_code": "ZIIDI",
+      "outcome": "escalated",
+      "advice": "Sub failed vetting twice. Directed to Retail Center for manual verification.",
+      "next_step": "",
+      "template_text": "Sub failed vetting twice. Directed to Retail Center for manual verification.",
+      "append_vetting": true
     }
   ]
 }
