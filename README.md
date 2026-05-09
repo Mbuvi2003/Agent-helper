@@ -104,6 +104,12 @@ Changes are automatically loaded on app restart.
 
 ## Changelog
 
+### v1.7.2 — Sprint 7: Production Hardening
+- **Strict Extraction Whitelisting**: Excluded 7 sensitive fields (e.g., M-Shwari Limit, 2FDNs) from auto-extraction to enforce manual entry. Enforced stricter name and numeric casting rules to reject CRM noise and fillers like "-NA".
+- **SLA Graceful Degradation**: Removed the hardcoded 2-hour SLA default. If no SLA is selected within 3 seconds, the listener safely defaults to outputting the raw Transaction Code while preserving the Hakikisha SMS queue.
+- **Inline Guidance Editor**: Upgraded the Guidance panel to a `ScrolledText` widget, allowing direct inline typing of custom instructions which seamlessly persist to `user_guidance.json`.
+- **MSIX Packaging & Validation**: Sanitized workspace artifacts, validated secrets, and compiled production MSIX bundle.
+
 ### v1.7.1 — Privacy Policy Update
 - **Privacy Policy**: Added an official Privacy and Data Handling Policy to clarify the app's offline-first architecture and compliance guidelines.
 

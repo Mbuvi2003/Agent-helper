@@ -235,6 +235,10 @@ Changes are loaded automatically on app restart.
 - ✅ Smart Listener UI — auto-selects checkbox + updates output widget on SLA digit (Sprint 5)
 - ✅ Reversal Txn Code — prepends txn ID to all reversal notes incl. Pending Authorized (Sprint 5)
 - ✅ TclError Guard — serial counter callback safely handles destroyed widgets (Sprint 5)
+- ✅ Strict Extraction Whitelisting — excluded sensitive fields from auto-extraction, enforced letters-only for names (Sprint 7)
+- ✅ Smart Reversal SLA Graceful Degradation — 3-second timeout defaults to Txn Code without breaking Hakikisha flow (Sprint 7)
+- ✅ Inline Guidance Editor — full ScrolledText widget for direct typing/editing, saved to JSON (Sprint 7)
+- ✅ MSIX Production Build — Workspace sanitized, .env secured, and bundle compiled (Sprint 7)
 
 ## Deployment Notes
 
