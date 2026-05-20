@@ -58,6 +58,9 @@ class AgentHelperUI:
         self.root.title("Agent Helper - Call Center Assistant")
         self.root.minsize(1100, 700)
 
+        # ── Visual theme (must run before any widget is built) ──────────
+        self._setup_styles()
+
         # Set window & taskbar icon
         try:
             import sys
@@ -95,8 +98,7 @@ class AgentHelperUI:
         self._last_crm_text = ''   # raw CRM text from clipboard
         self._search_after_id = None  # debounce id for live search
         self._reversal_txn_code = ''  # M-PESA transaction code for reversals
-        self._calling_no_locked = False  # sticky number: once set, don't overwrite
-        self._target_no_locked = False
+        self._phone_ring_index = 0  # ring-buffer index: 0→box1, 1→box2, 2→box1, …
         self._skiza_tune_name = ''  # captured Skiza tune name from CRM paste
         self._smart_listener_armed = False  # True when txn ID detected, waiting for SLA key
         self._detected_txn_id = ''  # transaction ID captured by smart listener
@@ -110,10 +112,13 @@ class AgentHelperUI:
         self._sr_sla_pending = ''        # accumulated digit string
         self._sr_sla_timer_id = None     # after() timer id for finalize
         self._sr_sla_hook = None         # keyboard hook handle
-        # Sequential Clipboard Queue state (paste-hook)
-        self._paste_hook = None          # keyboard hotkey handle for temp Ctrl+V hook
-        self._paste_hook_timeout_id = None  # after() id for 60s auto-disarm
-        self._help_window = None         # Contextual help singleton
+        # Sequential Clipboard Queue state (timer-based, EDR-safe)
+        self._hakikisha_pending = False      # True while hakikisha SMS timer is active
+        self._paste_hook_timeout_id = None   # after() id for hakikisha timer
+        # HLR Smart Listener state (timer-based, EDR-safe)
+        self._hlr_pending_suffix = ''        # pre-computed 6-digit suffix awaiting timer fire
+        self._hlr_timeout_id = None          # after() id for HLR suffix timer
+        self._help_window = None             # Contextual help singleton
         # SR configurable settings (loaded from settings.json, editable in editor)
         _sett = all_data.get('settings', {})
         self._sr_regex = _sett.get('sr_regex', r'1-[A-Z0-9]+')
@@ -141,7 +146,14 @@ class AgentHelperUI:
         if not isinstance(self._favorites, dict):
             self._favorites = {}
         self._history.setdefault('recent_issues', [])
+        self._history.setdefault('guidance_usage', {})
         self._favorites.setdefault('favorite_issues', [])
+
+        # Process-mining telemetry state
+        self._workflow_logs = self.data_loader.load_json('workflow_logs.json')
+        if not isinstance(self._workflow_logs, list):
+            self._workflow_logs = []
+        self._current_session = []  # actions for the in-progress resolution
 
         self._compact_mode = False
         self._full_geometry = None
@@ -153,80 +165,386 @@ class AgentHelperUI:
         self._last_clipboard = ""  # for clipboard polling
         self._poll_clipboard()
 
+    # ─── VISUAL THEME ─────────────────────────────────────────────
+
+    def _setup_styles(self):
+        """Configure the global ttk.Style palette.
+
+        Uses the 'clam' base theme (available on all platforms) and applies
+        the full Safaricom brand palette — green, red, and white — with
+        colour-psychology-driven button categories:
+
+        Button hierarchy
+        ----------------
+        PRIMARY   (Green)  — Positive / constructive actions: Copy, Paste, Pass
+        SECONDARY (LtGreen)— Navigation / low-risk: categories, search, utility
+        DANGER    (Red)    — Destructive / negative: Clear, Fail, Delete
+        INFO      (Teal)   — Informational / help: Ask me how, guidance clicks
+        NEUTRAL   (Gray)   — Passive / toggles: Mini, Pin, Edit
+
+        Palette
+        -------
+        BG_MAIN   #F4F5F7  — soft clean-grey page background (reduces eye strain)
+        WHITE     #FFFFFF  — card / labelframe fill
+        GREEN     #00A650  — M-PESA / Safaricom Green (primary actions)
+        GREEN_DK  #008A3D  — darker green for active/hover states
+        GREEN_LT  #E6F4EA  — pale green tint for secondary buttons
+        RED       #E60000  — Safaricom Red (destructive / fail / alert)
+        RED_DK    #B80000  — darker red for active/hover states
+        RED_LT    #FDEAEA  — pale red tint for danger secondary
+        TEAL      #00796B  — info/help actions
+        TEAL_LT   #E0F2F1  — pale teal tint
+        BORDER    #D1D5DB  — neutral light border
+        TEXT      #202124  — near-black for body text
+        NEUTRAL   #6B7280  — muted gray for passive actions
+        NEUTRAL_LT #F1F3F4 — light neutral background
+        """
+        BG_MAIN    = '#F4F5F7'
+        WHITE      = '#FFFFFF'
+        GREEN      = '#00A650'
+        GREEN_DK   = '#008A3D'
+        GREEN_LT   = '#E6F4EA'
+        RED        = '#E60000'
+        RED_DK     = '#B80000'
+        RED_LT     = '#FDEAEA'
+        TEAL       = '#00796B'
+        TEAL_LT    = '#E0F2F1'
+        BORDER     = '#D1D5DB'
+        TEXT       = '#202124'
+        NEUTRAL    = '#6B7280'
+        NEUTRAL_LT = '#F1F3F4'
+        FONT_UI    = ('Segoe UI', 9)
+        FONT_LBL   = ('Segoe UI', 10, 'bold')
+
+        self.style = ttk.Style(self.root)
+        self.style.theme_use('clam')
+
+        # Root window background
+        self.root.configure(bg=BG_MAIN)
+
+        # ── Frames ──────────────────────────────────────────────────────
+        self.style.configure('TFrame', background=BG_MAIN)
+        self.style.configure('TNotebook', background=BG_MAIN)
+        self.style.configure('Card.TFrame', background=WHITE)
+
+        # ── LabelFrames (cards) ─────────────────────────────────────────
+        self.style.configure(
+            'TLabelframe',
+            background=WHITE,
+            bordercolor=BORDER,
+            relief='solid',
+            padding=6,
+        )
+        self.style.configure(
+            'TLabelframe.Label',
+            font=FONT_LBL,
+            foreground=GREEN,
+            background=WHITE,
+        )
+
+        # ── PRIMARY buttons (green — constructive actions) ──────────────
+        self.style.configure(
+            'TButton',
+            font=FONT_UI,
+            foreground=WHITE,
+            background=GREEN,
+            borderwidth=0,
+            padding=(10, 5),
+            relief='flat',
+        )
+        self.style.map(
+            'TButton',
+            background=[('active', GREEN_DK), ('disabled', BORDER)],
+            foreground=[('disabled', '#888888')],
+        )
+
+        # ── SECONDARY buttons (light green — navigation / utility) ──────
+        self.style.configure(
+            'Secondary.TButton',
+            font=FONT_UI,
+            foreground=GREEN,
+            background=GREEN_LT,
+            borderwidth=0,
+            padding=(10, 5),
+            relief='flat',
+        )
+        self.style.map(
+            'Secondary.TButton',
+            background=[('active', '#CEEAD6'), ('disabled', BORDER)],
+            foreground=[('disabled', '#888888')],
+        )
+
+        # ── DANGER buttons (red — destructive / fail / alert) ───────────
+        self.style.configure(
+            'Danger.TButton',
+            font=FONT_UI,
+            foreground=WHITE,
+            background=RED,
+            borderwidth=0,
+            padding=(10, 5),
+            relief='flat',
+        )
+        self.style.map(
+            'Danger.TButton',
+            background=[('active', RED_DK), ('disabled', BORDER)],
+            foreground=[('disabled', '#888888')],
+        )
+
+        # ── DANGER SECONDARY (light red — soft warning) ─────────────────
+        self.style.configure(
+            'DangerSecondary.TButton',
+            font=FONT_UI,
+            foreground=RED,
+            background=RED_LT,
+            borderwidth=0,
+            padding=(10, 5),
+            relief='flat',
+        )
+        self.style.map(
+            'DangerSecondary.TButton',
+            background=[('active', '#F5C6C6'), ('disabled', BORDER)],
+            foreground=[('disabled', '#888888')],
+        )
+
+        # ── INFO buttons (teal — informational / help) ──────────────────
+        self.style.configure(
+            'Info.TButton',
+            font=FONT_UI,
+            foreground=WHITE,
+            background=TEAL,
+            borderwidth=0,
+            padding=(10, 5),
+            relief='flat',
+        )
+        self.style.map(
+            'Info.TButton',
+            background=[('active', '#004D40'), ('disabled', BORDER)],
+            foreground=[('disabled', '#888888')],
+        )
+
+        # ── NEUTRAL buttons (gray — passive toggles) ────────────────────
+        self.style.configure(
+            'Neutral.TButton',
+            font=FONT_UI,
+            foreground=TEXT,
+            background=NEUTRAL_LT,
+            borderwidth=0,
+            padding=(10, 5),
+            relief='flat',
+        )
+        self.style.map(
+            'Neutral.TButton',
+            background=[('active', '#E0E0E0'), ('disabled', BORDER)],
+            foreground=[('disabled', '#888888')],
+        )
+
+        # ── CATEGORY buttons (outlined green — sidebar navigation) ──────
+        self.style.configure(
+            'Category.TButton',
+            font=('Segoe UI', 9, 'bold'),
+            foreground=GREEN,
+            background=WHITE,
+            borderwidth=1,
+            bordercolor=GREEN,
+            padding=(10, 6),
+            relief='solid',
+        )
+        self.style.map(
+            'Category.TButton',
+            background=[('active', GREEN_LT), ('disabled', BORDER)],
+            foreground=[('active', GREEN_DK), ('disabled', '#888888')],
+        )
+
+        # ── Labels ──────────────────────────────────────────────────────
+        self.style.configure('TLabel',
+                             background=BG_MAIN,
+                             foreground=TEXT,
+                             font=FONT_UI)
+        self.style.configure('Card.TLabel',
+                             background=WHITE,
+                             foreground=TEXT,
+                             font=FONT_UI)
+        self.style.configure('FieldLabel.TLabel',
+                             background=WHITE,
+                             foreground=NEUTRAL,
+                             font=('Segoe UI', 8, 'bold'))
+        self.style.configure('SectionHeader.TLabel',
+                             background=WHITE,
+                             foreground=GREEN,
+                             font=('Segoe UI', 9, 'bold'))
+
+        # ── Entries ─────────────────────────────────────────────────────
+        self.style.configure('TEntry',
+                             fieldbackground=WHITE,
+                             foreground=TEXT,
+                             bordercolor=BORDER,
+                             lightcolor=GREEN,
+                             padding=(4, 3))
+        self.style.map('TEntry',
+                       bordercolor=[('focus', GREEN)],
+                       lightcolor=[('focus', GREEN)])
+
+        # ── Scrollbars ─────────────────────────────────────────────────
+        self.style.configure('TScrollbar',
+                             background=BORDER,
+                             troughcolor=BG_MAIN,
+                             arrowcolor=GREEN)
+
+        # ── Separator ──────────────────────────────────────────────────
+        self.style.configure('TSeparator', background=BORDER)
+
+        # ── Status bar label ───────────────────────────────────────────
+        self.style.configure('Status.TLabel',
+                             background='#1B2430',
+                             foreground='#42D07D',
+                             font=('Segoe UI', 9),
+                             padding=(8, 4))
+
+        # ── Radiobuttons / Checkbuttons ────────────────────────────────
+        self.style.configure('TRadiobutton',
+                             background=WHITE,
+                             foreground=TEXT,
+                             font=FONT_UI)
+        self.style.configure('TCheckbutton',
+                             background=WHITE,
+                             foreground=TEXT,
+                             font=FONT_UI)
+        # Pass radio (green indicator)
+        self.style.configure('Pass.TRadiobutton',
+                             background=WHITE,
+                             foreground=GREEN,
+                             font=('Segoe UI', 9, 'bold'))
+        # Fail radio (red indicator)
+        self.style.configure('Fail.TRadiobutton',
+                             background=WHITE,
+                             foreground=RED,
+                             font=('Segoe UI', 9, 'bold'))
+
+        # Store palette colours as instance attrs for reuse in _build_ui
+        self._c = dict(
+            bg=BG_MAIN, white=WHITE, blue=GREEN,
+            blue_dk=GREEN_DK, blue_lt=GREEN_LT,
+            red=RED, red_dk=RED_DK, red_lt=RED_LT,
+            teal=TEAL, teal_lt=TEAL_LT,
+            border=BORDER, text=TEXT,
+            neutral=NEUTRAL, neutral_lt=NEUTRAL_LT,
+        )
+
     # ─── UI BUILD ────────────────────────────────────────────────
 
     def _build_ui(self):
-        # ── Top bar ──
-        self._top_bar = ttk.Frame(self.root)
+        # ── Top bar — strict LEFT / RIGHT zones ──────────────────────
+        _bg = self._c['bg']
+        self._top_bar = tk.Frame(self.root, bg=_bg)
         self._top_bar.pack(side=tk.TOP, fill=tk.X, padx=10, pady=6)
         top = self._top_bar
 
-        ttk.Label(top, text="Agent Helper", font=("Arial", 15, "bold")).pack(side=tk.LEFT, padx=5)
+        # ── RIGHT button cluster (packed first so LEFT fills remaining space) ──
+        # Neutral gray for passive utility actions
+        _BTN_NEUTRAL = dict(relief="flat", cursor="hand2", padx=10, pady=5, bd=0,
+                    font=("Segoe UI", 9, "bold"),
+                    bg=self._c['neutral_lt'], fg=self._c['text'],
+                    activebackground='#E0E0E0', activeforeground=self._c['text'])
+
+        button_cluster_frame = tk.Frame(top, bg=_bg)
+        button_cluster_frame.pack(side=tk.RIGHT, padx=4)
+
+        # [⚙️ Edit]
+        tk.Button(button_cluster_frame, text="\u2699\ufe0f Edit",
+                  command=self._open_issue_editor, **_BTN_NEUTRAL).pack(side=tk.LEFT, padx=5)
+
+        # [💡 Ask me how]
+        self._help_btn = tk.Button(
+            button_cluster_frame,
+            text="\U0001f4a1 Ask me how",
+            command=self._show_cheat_sheet,
+            relief="flat", cursor="hand2",
+            bg=self._c['blue'], fg='#FFFFFF',
+            activebackground=self._c['blue_dk'], activeforeground='#FFFFFF',
+            font=("Segoe UI", 9, "bold"),
+            padx=10, pady=4, bd=0,
+        )
+        self._help_btn.pack(side=tk.LEFT, padx=5)
+
+        # [▣ Mini]
+        self._compact_btn = tk.Button(
+            button_cluster_frame, text="\u25ab Mini",
+            command=self._toggle_compact, **_BTN_NEUTRAL)
+        self._compact_btn.pack(side=tk.LEFT, padx=5)
+
+        # ── LEFT cluster: logo + version + search + calling numbers ──
+        left_cluster = tk.Frame(top, bg=_bg)
+        left_cluster.pack(side=tk.LEFT, fill=tk.Y)
+
+        tk.Label(left_cluster, text="Agent Helper",
+                 font=("Segoe UI", 15, "bold"), fg=self._c['blue'], bg=_bg).pack(side=tk.LEFT, padx=(0, 4))
         _ver_str = self.data_loader.load_json('settings.json').get('version', '')
         if _ver_str:
-            ttk.Label(top, text=f"v{_ver_str}", font=("Arial", 8), foreground="gray").pack(side=tk.LEFT, padx=0)
+            tk.Label(left_cluster, text=f"v{_ver_str}",
+                     font=("Segoe UI", 8), fg="#888888", bg=_bg).pack(side=tk.LEFT, padx=(0, 12))
 
-        # Search controls (hidden in compact mode)
-        self._search_frame = ttk.Frame(top)
+        # Search controls
+        self._search_frame = tk.Frame(left_cluster, bg=_bg)
         self._search_frame.pack(side=tk.LEFT)
-        ttk.Label(self._search_frame, text="Issue search:", font=("Arial", 10)).pack(side=tk.LEFT, padx=10)
+        tk.Label(self._search_frame, text="\U0001F50D",
+                 font=("Arial", 11), bg=_bg).pack(side=tk.LEFT, padx=(0, 2))
         self.search_var = tk.StringVar()
-        self.search_entry = ttk.Entry(self._search_frame, textvariable=self.search_var, width=30)
-        self.search_entry.pack(side=tk.LEFT, padx=4)
+        self.search_entry = ttk.Entry(self._search_frame, textvariable=self.search_var, width=28)
+        self.search_entry.pack(side=tk.LEFT, padx=(0, 4), ipady=3)
         self.search_entry.bind("<Return>", self._on_search)
         self.search_entry.bind("<Escape>", lambda e: self._hide_dropdown())
         self.search_entry.bind("<Down>", self._dropdown_focus)
         self.search_var.trace_add('write', self._on_search_typed)
-        ttk.Button(self._search_frame, text="Clear All", command=self._on_clear).pack(side=tk.LEFT, padx=4)
+        self._make_context_menu(self.search_entry)
+        ttk.Button(self._search_frame, text="\u2716 Clear All", cursor="hand2",
+                   style='Danger.TButton',
+                   command=self._on_clear).pack(side=tk.LEFT, padx=(0, 4))
 
-        # Calling Number (hidden in compact mode)
-        self._calling_frame = ttk.Frame(top)
+        # Calling Number indicator
+        self._calling_frame = tk.Frame(left_cluster, bg=_bg)
         self._calling_frame.pack(side=tk.LEFT)
-        ttk.Separator(self._calling_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
-        ttk.Label(self._calling_frame, text="SIM SWAP Nos:", font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=2)
-        self.calling_no_var = tk.StringVar(value="—")
-        self.target_no_var = tk.StringVar(value="—")
-        
-        self._calling_numbers_frame = ttk.Frame(self._calling_frame)
+        ttk.Separator(self._calling_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
+        tk.Label(self._calling_frame, text="SIM SWAP Nos:",
+                 font=("Segoe UI", 9, "bold"), fg=self._c['blue'], bg=_bg).pack(side=tk.LEFT, padx=2)
+        self.calling_no_var = tk.StringVar(value="\u2014")
+        self.target_no_var  = tk.StringVar(value="\u2014")
+
+        self._calling_numbers_frame = tk.Frame(self._calling_frame, bg=_bg)
         self._calling_numbers_frame.pack(side=tk.LEFT)
-        
-        icon1 = ttk.Label(self._calling_numbers_frame, text="\u260E", foreground="red", cursor="hand2")
+
+        icon1 = tk.Label(self._calling_numbers_frame, text="\u260E",
+                         fg="red", cursor="hand2", bg=_bg)
         icon1.pack(side=tk.LEFT)
         icon1.bind("<Button-1>", lambda e: self._copy_number(self.calling_no_var.get()))
-        
-        ttk.Label(self._calling_numbers_frame, textvariable=self.calling_no_var, font=("Consolas", 11),
-                  foreground="blue", width=10).pack(side=tk.LEFT, padx=2)
-                  
-        icon2 = ttk.Label(self._calling_numbers_frame, text="\u260E", foreground="green", cursor="hand2")
+        icon1.bind("<Double-Button-1>", lambda e: self._copy_hlr_suffix(self.calling_no_var.get()))
+        _lbl_calling = tk.Label(self._calling_numbers_frame, textvariable=self.calling_no_var,
+                 font=("Consolas", 11), fg="blue", width=10, bg=_bg, cursor="hand2")
+        _lbl_calling.pack(side=tk.LEFT, padx=2)
+        _lbl_calling.bind("<Button-1>", lambda e: self._copy_number(self.calling_no_var.get()))
+        _lbl_calling.bind("<Double-Button-1>", lambda e: self._copy_hlr_suffix(self.calling_no_var.get()))
+
+        icon2 = tk.Label(self._calling_numbers_frame, text="\u260E",
+                         fg="green", cursor="hand2", bg=_bg)
         icon2.pack(side=tk.LEFT)
         icon2.bind("<Button-1>", lambda e: self._copy_number(self.target_no_var.get()))
-        
-        ttk.Label(self._calling_numbers_frame, textvariable=self.target_no_var, font=("Consolas", 11),
-                  foreground="blue", width=10).pack(side=tk.LEFT, padx=2)
+        icon2.bind("<Double-Button-1>", lambda e: self._copy_hlr_suffix(self.target_no_var.get()))
+        _lbl_target = tk.Label(self._calling_numbers_frame, textvariable=self.target_no_var,
+                 font=("Consolas", 11), fg="blue", width=10, bg=_bg, cursor="hand2")
+        _lbl_target.pack(side=tk.LEFT, padx=2)
+        _lbl_target.bind("<Button-1>", lambda e: self._copy_number(self.target_no_var.get()))
+        _lbl_target.bind("<Double-Button-1>", lambda e: self._copy_hlr_suffix(self.target_no_var.get()))
 
-        # Editor / help buttons (far right)
-        ttk.Separator(top, orient=tk.VERTICAL).pack(side=tk.RIGHT, padx=8, fill=tk.Y)
-        ttk.Button(top, text="\u270f\ufe0f Editor", command=self._open_issue_editor).pack(side=tk.RIGHT, padx=4)
-        self._compact_btn = ttk.Button(top, text="\u25ab Mini", command=self._toggle_compact)
-        self._compact_btn.pack(side=tk.RIGHT, padx=4)
-
-        # ✨ Contextual Help button — "Ask me how" (far right, before separator)
-        self._help_btn = tk.Button(
-            top,
-            text="\U0001f4a1 Ask me how",
-            command=self._show_cheat_sheet,
-            relief="flat",
-            cursor="hand2",
-            bg="#E8F0FE",
-            fg="#1A73E8",
-            activebackground="#C5D8FB",
-            activeforeground="#174EA6",
-            font=("Arial", 10, "bold"),
-            padx=10,
-            pady=4,
-            bd=0,
+        # HLR button — copies last 6 digits of target number
+        self._hlr_btn = tk.Button(
+            self._calling_numbers_frame, text="HLR",
+            font=("Segoe UI", 8, "bold"), fg="#FFFFFF", bg=self._c['teal'],
+            activebackground='#004D40', activeforeground='#FFFFFF',
+            relief="flat", cursor="hand2", bd=0, padx=6, pady=1,
+            command=lambda: self._copy_hlr_suffix(self.target_no_var.get()),
         )
-        self._help_btn.pack(side=tk.RIGHT, padx=(4, 0))
+        self._hlr_btn.pack(side=tk.LEFT, padx=(4, 0))
+
+
 
         # ── Main 3-column content ──
         body = ttk.Frame(self.root)
@@ -239,29 +557,69 @@ class AgentHelperUI:
         self._left_panel.pack_propagate(False)
         left = self._left_panel
 
-        cat_frame = ttk.LabelFrame(left, text="Categories")
+        cat_frame = ttk.LabelFrame(left, text="\U0001F4C1 Categories")
         cat_frame.pack(fill=tk.X, padx=2, pady=2)
         for cat in self._ordered_categories():
-            ttk.Button(cat_frame, text=cat,
-                       command=lambda c=cat: self._on_category(c)).pack(fill=tk.X, padx=4, pady=1)
+            ttk.Button(cat_frame, text=cat, style='Category.TButton',
+                       command=lambda c=cat: self._on_category(c)).pack(fill=tk.X, padx=4, pady=2)
 
         # Guidance panel (populated when issue selected)
         guide_frame = ttk.LabelFrame(left, text="Guidance / Instructions")
         guide_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=4)
 
-        # Guidance editor buttons (mini-toolbar)
+        # ── Guidance toolbar: [🔍][___filter___][x] [➕ Add] [💾 Save] ──
         guide_btn_frame = ttk.Frame(guide_frame)
-        guide_btn_frame.pack(fill=tk.X, padx=4, pady=(2, 0))
-        ttk.Button(guide_btn_frame, text="\U0001F4BE Save", width=6,
-                   command=self._save_user_guidance).pack(side=tk.LEFT, padx=2)
-        ttk.Button(guide_btn_frame, text="➕ Add", width=6,
-                   command=self._add_guidance_line).pack(side=tk.LEFT, padx=2)
+        guide_btn_frame.pack(fill=tk.X, padx=4, pady=(4, 2))
+        guide_btn_frame.columnconfigure(0, weight=0)  # icon
+        guide_btn_frame.columnconfigure(1, weight=2)  # entry (half)
+        guide_btn_frame.columnconfigure(2, weight=0)  # clear btn
+        guide_btn_frame.columnconfigure(3, weight=1)  # Add (quarter)
+        guide_btn_frame.columnconfigure(4, weight=1)  # Save (quarter)
 
-        self.guidance_text = scrolledtext.ScrolledText(guide_frame, height=10, wrap=tk.WORD, font=("Consolas", 9))
+        # Search icon
+        ttk.Label(guide_btn_frame, text="\U0001F50D", font=("Arial", 10)).grid(
+            row=0, column=0, padx=(0, 2))
+
+        # Clean, empty search entry
+        self._guidance_filter_var = tk.StringVar()
+        self._guidance_filter_var.trace_add('write', self._on_guidance_filter_typed)
+        self._guide_filter_entry = ttk.Entry(
+            guide_btn_frame, textvariable=self._guidance_filter_var,
+            font=("Arial", 9))
+        self._guide_filter_entry.grid(row=0, column=1, sticky="ew", ipady=3)
+
+        # Clear button (×)
+        self._guide_filter_clear = tk.Label(
+            guide_btn_frame, text="\u00d7", font=("Arial", 11, "bold"),
+            fg="#888", cursor="hand2", padx=4)
+        self._guide_filter_clear.grid(row=0, column=2, padx=(1, 6))
+        self._guide_filter_clear.bind(
+            "<Button-1>", lambda e: (self._guidance_filter_var.set(''),
+                                     self._guide_filter_entry.focus_set()))
+
+        self._guide_add_btn = ttk.Button(guide_btn_frame, text="\u2795 Add",
+                                         command=self._add_guidance_line)
+        self._guide_add_btn.grid(row=0, column=3, sticky="ew", padx=(0, 4), ipady=3)
+
+        self._guide_save_btn = ttk.Button(guide_btn_frame, text="\U0001F4BE Save",
+                                          command=self._save_user_guidance,
+                                          state=tk.DISABLED)
+        self._guide_save_btn.grid(row=0, column=4, sticky="ew", ipady=3)
+
+        self.guidance_text = scrolledtext.ScrolledText(
+            guide_frame, height=10, wrap=tk.WORD,
+            font=("Consolas", 9), relief="flat",
+            borderwidth=1, highlightthickness=1,
+            highlightcolor=self._c['blue'],
+            highlightbackground=self._c['border'],
+            background='#FFFFFF')
         self.guidance_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self.guidance_text.bind("<Button-1>", self._on_guidance_click)
+        self._make_context_menu(self.guidance_text)
 
         self._current_guidance = []
         self._user_guidance = {}
+        self._guidance_has_pending_adds = False  # tracks unsaved additions
         self._guidance_dropdown_win = None
 
         # --- CENTRE: CRM paste + extracted fields ---
@@ -303,27 +661,43 @@ class AgentHelperUI:
         self._default_notes_label.pack(anchor=tk.W, padx=4)
 
         # Custom note
-        custom_frame = ttk.Frame(out_frame)
-        custom_frame.pack(fill=tk.X, padx=4, pady=2)
-        ttk.Label(custom_frame, text="Extra note:").pack(side=tk.LEFT)
+        self._custom_note_frame = ttk.Frame(out_frame)
+        self._custom_note_frame.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Label(self._custom_note_frame, text="Extra note:").pack(side=tk.LEFT)
         self.custom_note_var = tk.StringVar()
         self.custom_note_var.trace_add('write', lambda *_: self._on_field_changed())
-        ttk.Entry(custom_frame, textvariable=self.custom_note_var, width=35).pack(side=tk.LEFT, padx=4)
+        _custom_note_entry = ttk.Entry(self._custom_note_frame, textvariable=self.custom_note_var, width=35)
+        _custom_note_entry.pack(side=tk.LEFT, padx=4)
+        self._make_context_menu(_custom_note_entry)
 
-        self.output_text = scrolledtext.ScrolledText(out_frame, height=14, wrap=tk.WORD)
+        self.output_text = scrolledtext.ScrolledText(
+            out_frame, height=14, wrap=tk.WORD,
+            relief="flat", borderwidth=1,
+            highlightthickness=1,
+            highlightcolor=self._c['blue'],
+            highlightbackground=self._c['border'],
+            background='#FFFFFF', font=("Consolas", 9))
         self.output_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self._make_context_menu(self.output_text)
 
         btn_row2 = ttk.Frame(out_frame)
         btn_row2.pack(fill=tk.X, padx=4, pady=4)
-        ttk.Button(btn_row2, text="Copy Output", command=self._on_copy_output).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row2, text="Copy Serial No", command=self._on_copy_serial).pack(side=tk.LEFT, padx=2)
-        self.fav_btn = ttk.Button(btn_row2, text="★ Fav", command=self._toggle_favorite)
+        self._btn_copy_output = ttk.Button(btn_row2, text="\u2714 Copy Output", command=self._on_copy_output)
+        self._btn_copy_output.pack(side=tk.LEFT, padx=2)
+        self._btn_copy_serial = ttk.Button(btn_row2, text="Copy Serial No",
+                                            style='Secondary.TButton',
+                                            command=self._on_copy_serial)
+        self._btn_copy_serial.pack(side=tk.LEFT, padx=2)
+        self.fav_btn = ttk.Button(btn_row2, text="\u2605 Fav",
+                                   style='Secondary.TButton',
+                                   command=self._toggle_favorite)
         self.fav_btn.pack(side=tk.LEFT, padx=2)
 
         # ── Status bar ──
         self.status_var = tk.StringVar(value="Ready — select an issue and paste CRM data")
-        ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN).pack(
-            side=tk.BOTTOM, fill=tk.X, padx=5, pady=4)
+        ttk.Label(self.root, textvariable=self.status_var,
+                  style='Status.TLabel').pack(
+            side=tk.BOTTOM, fill=tk.X)
 
     # ─── COMPACT MODE ────────────────────────────────────────────
 
@@ -411,19 +785,43 @@ class AgentHelperUI:
 
         cf = inner  # shorthand
 
-        # ── Row 1: Title + Search + Pin + Editor + Full button ──
+        # ── Row 1: LEFT = 🔍 search  |  RIGHT = button cluster ──────
         top = ttk.Frame(cf)
         top.pack(fill=tk.X, padx=4, pady=(4, 2))
-        ttk.Button(top, text="Clear All", width=8, command=self._on_clear).pack(side=tk.RIGHT, padx=2)
-        ttk.Button(top, text="▣ Full", width=5, command=self._toggle_compact).pack(side=tk.RIGHT, padx=2)
-        self._pin_btn = ttk.Button(top, text="\U0001F4CC", width=3, command=self._toggle_pin)
-        self._pin_btn.pack(side=tk.RIGHT, padx=2)
-        ttk.Button(top, text="\u2699", width=3, command=self._open_issue_editor).pack(side=tk.RIGHT, padx=1)
-        se = ttk.Entry(top, textvariable=self.search_var, width=12)
-        se.pack(side=tk.RIGHT, padx=2)
+
+        # LEFT: search
+        ttk.Label(top, text="\U0001F50D").pack(side=tk.LEFT)
+        se = ttk.Entry(top, textvariable=self.search_var, width=10)
+        se.pack(side=tk.LEFT, padx=(2, 4))
+        self._make_context_menu(se)
         se.bind("<Escape>", lambda e: self._hide_dropdown())
         se.bind("<Down>", self._dropdown_focus)
-        ttk.Label(top, text="\U0001F50D").pack(side=tk.RIGHT)
+
+        # RIGHT cluster (right-to-left packing: last packed = leftmost on screen)
+        _MB = dict(relief="flat", cursor="hand2", font=("Arial", 8, "bold"),
+                   bg="#F1F3F4", fg="#202124",
+                   activebackground="#E0E0E0", padx=3, pady=2, bd=0)
+
+        tk.Button(top, text="Clear", command=self._on_clear, **_MB).pack(
+            side=tk.RIGHT, padx=2)
+        tk.Button(top, text="\u25a3 Full", command=self._toggle_compact, **_MB).pack(
+            side=tk.RIGHT, padx=2)
+        self._pin_btn = tk.Button(
+            top, text="\U0001F4CC Pin",
+            command=self._toggle_pin, **_MB)
+        self._pin_btn.pack(side=tk.RIGHT, padx=2)
+        tk.Button(
+            top, text="\U0001f4a1",
+            command=self._show_cheat_sheet,
+            relief="flat", cursor="hand2",
+            font=("Arial", 10),
+            bg="#E8F0FE", fg="#1A73E8",
+            activebackground="#C5D8FB",
+            padx=3, pady=2, bd=0,
+        ).pack(side=tk.RIGHT, padx=2)
+        tk.Button(top, text="\u2699\ufe0f Edit",
+                  command=self._open_issue_editor, **_MB).pack(side=tk.RIGHT, padx=2)
+
 
         # ── Row 2: 4 pinned issue buttons (direct select, no extra click) ──
         cat_row = ttk.Frame(cf)
@@ -445,22 +843,80 @@ class AgentHelperUI:
         c_icon1 = ttk.Label(self._compact_calling_frame, text="\u260E", foreground="red", cursor="hand2")
         c_icon1.pack(side=tk.LEFT)
         c_icon1.bind("<Button-1>", lambda e: self._copy_number(self.calling_no_var.get()))
-        
-        ttk.Label(self._compact_calling_frame, textvariable=self.calling_no_var,
-                  font=("Consolas", 9), foreground="blue").pack(side=tk.LEFT, padx=1)
-        
+        c_icon1.bind("<Double-Button-1>", lambda e: self._copy_hlr_suffix(self.calling_no_var.get()))
+
+        _c_lbl_calling = ttk.Label(self._compact_calling_frame, textvariable=self.calling_no_var,
+                  font=("Consolas", 9), foreground="blue", cursor="hand2")
+        _c_lbl_calling.pack(side=tk.LEFT, padx=1)
+        _c_lbl_calling.bind("<Button-1>", lambda e: self._copy_number(self.calling_no_var.get()))
+        _c_lbl_calling.bind("<Double-Button-1>", lambda e: self._copy_hlr_suffix(self.calling_no_var.get()))
+
         c_icon2 = ttk.Label(self._compact_calling_frame, text="\u260E", foreground="green", cursor="hand2")
         c_icon2.pack(side=tk.LEFT, padx=(4, 0))
         c_icon2.bind("<Button-1>", lambda e: self._copy_number(self.target_no_var.get()))
-        
-        ttk.Label(self._compact_calling_frame, textvariable=self.target_no_var,
-                  font=("Consolas", 9), foreground="blue").pack(side=tk.LEFT, padx=1)
+        c_icon2.bind("<Double-Button-1>", lambda e: self._copy_hlr_suffix(self.target_no_var.get()))
 
-        # ── Row 4: Guidance text widget (compact mode) ──
+        _c_lbl_target = ttk.Label(self._compact_calling_frame, textvariable=self.target_no_var,
+                  font=("Consolas", 9), foreground="blue", cursor="hand2")
+        _c_lbl_target.pack(side=tk.LEFT, padx=1)
+        _c_lbl_target.bind("<Button-1>", lambda e: self._copy_number(self.target_no_var.get()))
+        _c_lbl_target.bind("<Double-Button-1>", lambda e: self._copy_hlr_suffix(self.target_no_var.get()))
+
+        # HLR button (compact)
+        self._hlr_btn_compact = tk.Button(
+            self._compact_calling_frame, text="HLR",
+            font=("Segoe UI", 7, "bold"), fg="#FFFFFF", bg=self._c['teal'],
+            activebackground='#004D40', activeforeground='#FFFFFF',
+            relief="flat", cursor="hand2", bd=0, padx=4, pady=0,
+            command=lambda: self._copy_hlr_suffix(self.target_no_var.get()),
+        )
+        self._hlr_btn_compact.pack(side=tk.LEFT, padx=(3, 0))
+
+        # ── Row 4: Guidance (compact) ──
         guide_lf = ttk.LabelFrame(cf, text="Guidance")
         guide_lf.pack(fill=tk.X, padx=4, pady=2)
-        self.guidance_text = scrolledtext.ScrolledText(guide_lf, height=4, wrap=tk.WORD, font=("Consolas", 8))
+
+        # Toolbar: [🔍][___filter___][x] [➕ Add] [💾 Save]
+        guide_btn_c = ttk.Frame(guide_lf)
+        guide_btn_c.pack(fill=tk.X, padx=2, pady=(3, 1))
+        guide_btn_c.columnconfigure(0, weight=0)
+        guide_btn_c.columnconfigure(1, weight=2)
+        guide_btn_c.columnconfigure(2, weight=0)
+        guide_btn_c.columnconfigure(3, weight=1)
+        guide_btn_c.columnconfigure(4, weight=1)
+
+        ttk.Label(guide_btn_c, text="\U0001F50D", font=("Arial", 9)).grid(
+            row=0, column=0, padx=(0, 2))
+
+        c_fe = ttk.Entry(guide_btn_c, textvariable=self._guidance_filter_var,
+                         font=("Arial", 8))
+        c_fe.grid(row=0, column=1, sticky="ew", ipady=2)
+
+        c_clr = tk.Label(guide_btn_c, text="\u00d7", font=("Arial", 10, "bold"),
+                         fg="#888", cursor="hand2", padx=3)
+        c_clr.grid(row=0, column=2, padx=(1, 4))
+        c_clr.bind("<Button-1>", lambda e: (self._guidance_filter_var.set(''),
+                                             c_fe.focus_set()))
+
+        self._guide_add_btn = ttk.Button(guide_btn_c, text="\u2795 Add",
+                                          command=self._add_guidance_line)
+        self._guide_add_btn.grid(row=0, column=3, sticky="ew", padx=(0, 3), ipady=2)
+
+        self._guide_save_btn = ttk.Button(guide_btn_c, text="\U0001F4BE Save",
+                                           command=self._save_user_guidance,
+                                           state=tk.DISABLED)
+        self._guide_save_btn.grid(row=0, column=4, sticky="ew", ipady=2)
+
+        self.guidance_text = scrolledtext.ScrolledText(
+            guide_lf, height=4, wrap=tk.WORD,
+            font=("Consolas", 8), relief="flat",
+            borderwidth=1, highlightthickness=1,
+            highlightcolor=self._c['blue'],
+            highlightbackground=self._c['border'],
+            background='#FFFFFF')
         self.guidance_text.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+        self.guidance_text.bind("<Button-1>", self._on_guidance_click)
+        self._make_context_menu(self.guidance_text)
 
         # ── Row 6: Issue label ──
         ttk.Label(cf, textvariable=self.issue_label_var,
@@ -477,18 +933,30 @@ class AgentHelperUI:
         # ── Row 9: Extra note + action buttons ──
         self._compact_act_row = ttk.Frame(cf)
         self._compact_act_row.pack(fill=tk.X, padx=4, pady=2)
-        ttk.Label(self._compact_act_row, text="Note:", font=("Arial", 8)).pack(side=tk.LEFT)
-        ttk.Entry(self._compact_act_row, textvariable=self.custom_note_var, width=12).pack(side=tk.LEFT, padx=2)
-        ttk.Button(self._compact_act_row, text="\U0001F4CB Serial", command=self._on_copy_serial).pack(side=tk.LEFT, padx=2)
-        ttk.Button(self._compact_act_row, text="\U0001F4CB Output", command=self._on_copy_output).pack(side=tk.LEFT, padx=2)
-        ttk.Button(self._compact_act_row, text="\u2605", width=2, command=self._toggle_favorite).pack(side=tk.LEFT, padx=2)
+        self._compact_note_label = ttk.Label(self._compact_act_row, text="Note:", font=("Arial", 8))
+        self._compact_note_label.pack(side=tk.LEFT)
+        self._compact_note_entry = ttk.Entry(self._compact_act_row, textvariable=self.custom_note_var, width=12)
+        self._compact_note_entry.pack(side=tk.LEFT, padx=2)
+        self._make_context_menu(self._compact_note_entry)
+        self._compact_btn_serial = ttk.Button(self._compact_act_row, text="\U0001F4CB Serial", command=self._on_copy_serial)
+        self._compact_btn_serial.pack(side=tk.LEFT, padx=2)
+        self._compact_btn_output = ttk.Button(self._compact_act_row, text="\U0001F4CB Output", command=self._on_copy_output)
+        self._compact_btn_output.pack(side=tk.LEFT, padx=2)
+        self._compact_fav_btn = ttk.Button(self._compact_act_row, text="\u2605", width=2, command=self._toggle_favorite)
+        self._compact_fav_btn.pack(side=tk.LEFT, padx=2)
 
         # ── Row 10: Output ──
         self._compact_out_lf = ttk.LabelFrame(cf, text="Interaction Output")
         self._compact_out_lf.pack(fill=tk.X, padx=4, pady=(2, 4))
         self.output_text = scrolledtext.ScrolledText(
-            self._compact_out_lf, height=7, wrap=tk.WORD, font=("Consolas", 8))
+            self._compact_out_lf, height=7, wrap=tk.WORD,
+            font=("Consolas", 8), relief="flat",
+            borderwidth=1, highlightthickness=1,
+            highlightcolor=self._c['blue'],
+            highlightbackground=self._c['border'],
+            background='#FFFFFF')
         self.output_text.pack(fill=tk.X, padx=2, pady=2)
+        self._make_context_menu(self.output_text)
 
     def _toggle_pin(self):
         """Toggle always-on-top (pin) for the compact window."""
@@ -566,17 +1034,44 @@ class AgentHelperUI:
         self.root.bind('<Control-C>', self._shortcut_copy_output)
 
     def _register_global_hotkey(self):
-        """Register Alt+Space as a global toggle hotkey via the keyboard library."""
-        if not kb:
-            return  # keyboard library unavailable
+        """Register Ctrl+Shift+Space as a global toggle hotkey using the
+        Win32 RegisterHotKey API (EDR-safe).
+
+        Unlike the `keyboard` library which uses WH_KEYBOARD_LL low-level
+        hooks (blocked by corporate EDR/antivirus), RegisterHotKey is a
+        legitimate Win32 API that registers a system-wide hotkey without
+        triggering security software.
+
+        A dedicated daemon thread runs the Windows message pump so the
+        main Tkinter event loop is never blocked.
+        """
+        if sys.platform != 'win32':
+            return
         try:
-            self._hotkey_hook = kb.add_hotkey(
-                'alt+space',
-                lambda: self.root.after(0, self._toggle_visibility),
-                suppress=False,
-            )
+            import ctypes
+            from ctypes import wintypes
+
+            def _hotkey_thread():
+                user32 = ctypes.windll.user32
+                MOD_CONTROL = 0x0002
+                MOD_SHIFT = 0x0004
+                VK_SPACE = 0x20
+                WM_HOTKEY = 0x0312
+                HOTKEY_ID = 1
+
+                if not user32.RegisterHotKey(None, HOTKEY_ID,
+                                             MOD_CONTROL | MOD_SHIFT, VK_SPACE):
+                    return  # registration failed (another app owns the combo)
+
+                msg = wintypes.MSG()
+                while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) != 0:
+                    if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
+                        self.root.after(0, self._toggle_visibility)
+
+            t = threading.Thread(target=_hotkey_thread, daemon=True)
+            t.start()
         except Exception:
-            self._hotkey_hook = None
+            pass
 
     def _toggle_visibility(self):
         """Alt+Space handler (runs on Tkinter main thread via root.after).
@@ -715,6 +1210,7 @@ class AgentHelperUI:
         self._search_after_id = self.root.after(250, self._on_search)
 
     def _do_search(self, query):
+        self._log_action('SEARCH', query[:60])
         self.search_results = self.issue_engine.get_top_matches(query, limit=8)
         self.root.after(0, self._update_results)
 
@@ -832,6 +1328,10 @@ class AgentHelperUI:
 
     def _apply_selected_issue(self):
         """Shared logic after an issue is selected (from results, fav, or recent)."""
+        # Reset telemetry session for the new resolution cycle
+        self._current_session = []
+        self._log_action('SELECT_ISSUE', self.current_raw_issue.get('issue_code', ''))
+
         # Soft-reset: clear stale output/fields from the previous issue
         self._reset_for_new_issue()
 
@@ -876,29 +1376,128 @@ class AgentHelperUI:
             cat = self.current_raw_issue.get('category', '')
             self._set_fields_frame_visible(issue_code != 'REVERSAL' and cat not in ('GENERAL', 'MPESA'))
 
+        # ── SIM_SWAP-only widgets: Serial, Extra note, Fav ─────────────────
+        # Copy Output is always visible.
+        is_sim_swap = (issue_code in ('SIM_SWAP', 'TILL_SWAP'))
+
+        # Full-mode widgets
+        for widget, pack_kwargs in [
+            (getattr(self, '_btn_copy_serial',   None), dict(side=tk.LEFT, padx=2)),
+            (getattr(self, '_custom_note_frame', None), dict(fill=tk.X, padx=4, pady=2)),
+            (getattr(self, 'fav_btn',            None), dict(side=tk.LEFT, padx=2)),
+        ]:
+            if widget is None:
+                continue
+            try:
+                if is_sim_swap:
+                    widget.pack(**pack_kwargs)
+                else:
+                    widget.pack_forget()
+            except Exception:
+                pass
+
+        # Compact-mode widgets
+        for widget, pack_kwargs in [
+            (getattr(self, '_compact_btn_serial',  None), dict(side=tk.LEFT, padx=2)),
+            (getattr(self, '_compact_note_label',  None), dict(side=tk.LEFT)),
+            (getattr(self, '_compact_note_entry',  None), dict(side=tk.LEFT, padx=2)),
+            (getattr(self, '_compact_fav_btn',     None), dict(side=tk.LEFT, padx=2)),
+        ]:
+            if widget is None:
+                continue
+            try:
+                if is_sim_swap:
+                    widget.pack(**pack_kwargs)
+                else:
+                    widget.pack_forget()
+            except Exception:
+                pass
+
+        # Ensure Output buttons are always visible (idempotent re-pack)
+        for attr, kwargs in [
+            ('_btn_copy_output',     dict(side=tk.LEFT, padx=2)),
+            ('_compact_btn_output',  dict(side=tk.LEFT, padx=2)),
+        ]:
+            btn = getattr(self, attr, None)
+            if btn is None:
+                continue
+            try:
+                btn.pack(**kwargs)
+            except Exception:
+                pass
+
         self._rebuild_output()
 
     def _show_guidance(self):
         issue_code = self.current_raw_issue.get('issue_code', '')
-        # Sprint 4: check for user-edited guidance overrides
         user_guide = self._load_user_guidance(issue_code)
-        if user_guide:
-            self._current_guidance = list(user_guide)
-        else:
-            self._current_guidance = self.current_raw_issue.get('guidance', [])
+        self._current_guidance = list(user_guide) if user_guide else list(
+            self.current_raw_issue.get('guidance', []))
+
+        # Reset filter bar to empty and disable Save for fresh issue
+        self._guidance_has_pending_adds = False
+        try:
+            self._guide_save_btn.configure(state=tk.DISABLED)
+        except Exception:
+            pass
+        self._guidance_filter_var.set('')
+        
         self._filter_guidance()
 
-    def _filter_guidance(self):
-        """Populate the text widget with the guidance list."""
-        self.guidance_text.delete("1.0", tk.END)
-        if not self._current_guidance:
-            self.guidance_text.insert(tk.END, "No guidance for this issue.\n")
+    def _filter_guidance(self, keyword: str = ""):
+        """Populate the guidance text widget.
+
+        Each line is tagged so that clicking it copies the text to clipboard.
+        When *keyword* is provided only matching lines are shown, with the
+        keyword highlighted in yellow.
+        """
+        widget = self.guidance_text
+        widget.configure(state=tk.NORMAL)
+        widget.delete("1.0", tk.END)
+        # Remove stale per-line tags
+        for tag in list(widget.tag_names()):
+            if tag.startswith("_guide_line_"):
+                widget.tag_delete(tag)
+
+        lines = self._current_guidance
+        # ── Smart sort: most-clicked notes rise to the top ──────────────
+        usage = self._history.get('guidance_usage', {})
+        lines = sorted(lines, key=lambda x: usage.get(x, 0), reverse=True)
+        if not lines:
+            widget.insert(tk.END, "No guidance for this issue.\n")
             return
-            
-        for line in self._current_guidance:
-            self.guidance_text.insert(tk.END, f"– {line}\n")
 
+        kw = keyword.strip().lower()
+        matched = 0
+        for idx, line in enumerate(lines):
+            if kw and kw not in line.lower():
+                continue
+            tag = f"_guide_line_{idx}"
+            display = f"\u2013 {line}\n"
+            start = widget.index(tk.END)
+            widget.insert(tk.END, display, tag)
+            # Single-click → copy
+            widget.tag_bind(
+                tag, "<Button-1>",
+                lambda e, t=line: (self._copy(t), self._set_status(f"Copied: {t[:60]}"))
+            )
+            # Double-click → inline edit (Fix 7)
+            widget.tag_bind(
+                tag, "<Double-Button-1>",
+                lambda e, i=idx, t=line: self._edit_guidance_line(i, t)
+            )
+            widget.tag_configure(tag, foreground="#1A237E")
+            if kw:
+                pos = display.lower().find(kw)
+                if pos != -1:
+                    hl_s = f"{start} + {pos} chars"
+                    hl_e = f"{start} + {pos + len(kw)} chars"
+                    widget.tag_configure("_kw_hl", background="#FFEB3B", foreground="black")
+                    widget.tag_add("_kw_hl", hl_s, hl_e)
+            matched += 1
 
+        if kw and matched == 0:
+            widget.insert(tk.END, f'No guidance matched "{keyword}".\n')
 
     def _build_interaction_notes(self):
         """Rebuild interaction note checkboxes from the selected issue's notes."""
@@ -936,6 +1535,11 @@ class AgentHelperUI:
                         var.set(False)
                     except Exception:
                         pass
+            # Log which note the agent selected
+            note_label = next(
+                (txt for txt, v in self.note_vars if v is toggled_var), ''
+            )
+            self._log_action('SELECT_NOTE', note_label[:60])
         # Rebuild output to reflect new selection
         self._rebuild_output()
 
@@ -1160,6 +1764,7 @@ class AgentHelperUI:
             messagebox.showwarning("Empty", "Clipboard is empty — copy CRM/View 360 data first")
             return
         self._last_crm_text = text
+        self._log_action('PASTE_CRM')
         self._do_extract(text.strip())
 
     def _on_paste_crm(self):
@@ -1356,6 +1961,18 @@ class AgentHelperUI:
         if not text:
             messagebox.showwarning("Empty", "Generate output first")
             return
+        # ── Telemetry: save completed workflow session ──────────────────
+        self._log_action('COPY_OUTPUT', 'Workflow Complete')
+        session_record = {
+            'timestamp': time.time(),
+            'issue':     self.current_raw_issue.get('issue_code', 'UNKNOWN')
+                         if self.current_raw_issue else 'UNKNOWN',
+            'sequence':  list(self._current_session),
+        }
+        self._workflow_logs.append(session_record)
+        self.data_loader.save_json('workflow_logs.json', self._workflow_logs)
+        self._current_session = []  # reset for the next call
+        # ── End telemetry ───────────────────────────────────────────────
         self._copy(text)
         self._set_status("Interaction output copied to clipboard")
         self._reset_capture_state()
@@ -1407,13 +2024,12 @@ class AgentHelperUI:
     # ─── CALLING NUMBER ──────────────────────────────────────────
 
     def _reset_capture_state(self):
-        """Reset the dual-capture clipboard state."""
+        """Reset the dual-capture clipboard state (ring buffer)."""
         if hasattr(self, 'calling_no_var'):
             self.calling_no_var.set("—")
-        self._calling_no_locked = False
         if hasattr(self, 'target_no_var'):
             self.target_no_var.set("—")
-        self._target_no_locked = False
+        self._phone_ring_index = 0
 
     def _paste_calling_no(self):
         """Read clipboard; if it's exactly a 9-digit number, store it as calling number."""
@@ -1441,8 +2057,14 @@ class AgentHelperUI:
         self._set_status(f"Number copied: {num}")
 
     def _poll_clipboard(self):
-        """Poll clipboard every 500ms; auto-detect a 9-digit calling number.
-        Sticky Number (Sprint 2): once a number is locked, don't overwrite.
+        """Poll clipboard every 500ms; auto-detect a 9-digit calling/target number.
+
+        Uses a ring-buffer (modulo 2):
+          1st number  → Box 1 (Calling No)
+          2nd number  → Box 2 (Target No)
+          3rd number  → replaces Box 1
+          4th number  → replaces Box 2  … and so on.
+        Numbers are never cleared by clicking output / serial widgets.
         """
         try:
             text = self.root.clipboard_get().strip()
@@ -1452,20 +2074,61 @@ class AgentHelperUI:
             self._last_clipboard = text
             digits = re.sub(r'\D', '', text)
             if len(digits) == 9:
-                if not getattr(self, '_calling_no_locked', False):
+                idx = getattr(self, '_phone_ring_index', 0)
+                if idx % 2 == 0:
                     self.calling_no_var.set(digits)
-                    self._calling_no_locked = True
-                    self._set_status(f"Calling number locked: {digits}")
-                elif not getattr(self, '_target_no_locked', False):
+                    self._set_status(f"Calling No (box 1): {digits}")
+                else:
                     if hasattr(self, 'target_no_var'):
                         self.target_no_var.set(digits)
-                    self._target_no_locked = True
-                    self._set_status(f"Target number locked: {digits}")
-            # Smart Listener (Sprint 4): check for transaction ID
+                    self._set_status(f"Target No (box 2): {digits}")
+                    pass  # HLR is manual — agent clicks HLR button when ready
+                self._phone_ring_index = idx + 1
+            # Smart Listener: check for transaction ID
             self._check_txn_id_clipboard(text)
             # SR SLA Listener: check for SR number
             self._check_sr_clipboard(text)
         self.root.after(500, self._poll_clipboard)
+
+    # ─── HLR SMART LISTENER ──────────────────────────────────────
+
+    def _arm_hlr_paste_hook(self, phone_number: str) -> None:
+        """No-op.  HLR is now fully manual (button-driven)."""
+        pass
+
+    def _fire_hlr_suffix(self) -> None:
+        """No-op.  HLR is now fully manual (button-driven)."""
+        pass
+
+    def _disarm_hlr_paste_hook(self) -> None:
+        """Cancel any pending HLR suffix timer.  Idempotent."""
+        if self._hlr_timeout_id is not None:
+            try:
+                self.root.after_cancel(self._hlr_timeout_id)
+            except Exception:
+                pass
+            self._hlr_timeout_id = None
+        self._hlr_pending_suffix = ''
+
+    def _copy_hlr_suffix(self, phone_number: str) -> None:
+        """Manual double-click override: copy last 6 digits immediately.
+
+        Args:
+            phone_number: Value from calling_no_var or target_no_var StringVar.
+        """
+        phone_number = phone_number.strip()
+        if not phone_number or phone_number == '\u2014':
+            self._set_status("No number captured yet")
+            return
+        digits = re.sub(r'\D', '', phone_number)
+        if len(digits) < 6:
+            self._set_status("Number too short for HLR suffix")
+            return
+        suffix = digits[-6:]
+        self._disarm_hlr_paste_hook()
+        self._copy(suffix)
+        self._last_clipboard = suffix
+        self._set_status(f"HLR suffix copied manually: {suffix}")
 
     # ─── HELPERS ─────────────────────────────────────────────────
 
@@ -1490,7 +2153,8 @@ class AgentHelperUI:
         self._detected_sr = ''
         self._sr_sla_pending = ''
         self._disarm_sr_sla_listener()
-        self._disarm_paste_hook()  # disarm any pending clipboard queue hook
+        self._disarm_paste_hook()       # disarm Hakikisha SMS clipboard queue hook
+        self._disarm_hlr_paste_hook()   # disarm HLR suffix clipboard queue hook
         self.vetting_issue_code = None
         self.field_entries = {}
         self.vetting_result_var.set('pass')
@@ -1585,7 +2249,7 @@ class AgentHelperUI:
 
     def _check_txn_id_clipboard(self, text):
         """Check if clipboard contains an M-PESA transaction ID (e.g. SIO3LK7Q4D).
-        If so, arm the smart listener to wait for an SLA keypress.
+        Arms the smart listener — waits indefinitely for SLA digit input.
         """
         if not text:
             return
@@ -1596,29 +2260,28 @@ class AgentHelperUI:
             if txn != self._detected_txn_id:
                 self._detected_txn_id = txn
                 self._smart_listener_armed = True
+                self._sla_pending = ''
                 self._reversal_txn_code = txn
-                self._set_status(f"Txn ID detected: {txn} — press 2/12/72 for SLA")
+                self._set_status(f"Txn ID detected: {txn} — type 2, 12, or 72 for SLA")
                 self._arm_sla_listener()
+                # Cancel any stale finalize timer — do NOT schedule one here;
+                # finalize is only triggered after the agent types SLA digits.
                 if hasattr(self, '_sla_timer_id') and self._sla_timer_id:
                     self.root.after_cancel(self._sla_timer_id)
-                self._sla_timer_id = self.root.after(3000, self._finalize_sla)
+                    self._sla_timer_id = None
 
     def _arm_sla_listener(self):
-        """Listen for SLA keypresses (2, 12, 72) using the keyboard library."""
+        """Listen for SLA keypresses (digits) using the keyboard library."""
         if not kb:
             return
-        try:
-            # Unhook any previous SLA listener
-            self._disarm_sla_listener()
-        except Exception:
-            pass
+        self._disarm_sla_listener()
 
         def _on_sla_key(event):
             if not self._smart_listener_armed:
                 return
             key = event.name
-            # Only listen for SLA-relevant digit keys
-            if key in ('2', '1', '7'):
+            # Accept any digit — SLA values are '2', '12', '72'
+            if key.isdigit():
                 self.root.after(0, lambda k=key: self._handle_sla_digit(k))
 
         try:
@@ -1627,26 +2290,34 @@ class AgentHelperUI:
             pass
 
     def _handle_sla_digit(self, digit):
-        """Accumulate SLA digits. After 2000ms of no further input, finalize."""
+        """Accumulate SLA digits. After 1500ms of silence, finalize."""
         if not self._smart_listener_armed:
             return
         # Cancel any pending finalize timer
         if hasattr(self, '_sla_timer_id') and self._sla_timer_id:
             self.root.after_cancel(self._sla_timer_id)
-        # Accumulate digit
-        pending = getattr(self, '_sla_pending', '')
-        self._sla_pending = pending + digit
-        # Schedule finalize after 2000ms
-        self._sla_timer_id = self.root.after(2000, self._finalize_sla)
+        self._sla_pending = getattr(self, '_sla_pending', '') + digit
+        # Schedule finalize after 1500ms of silence
+        self._sla_timer_id = self.root.after(1500, self._finalize_sla)
 
     def _finalize_sla(self):
         """Finalize the SLA selection based on accumulated digits.
         Also auto-selects the matching interaction note checkbox and
         updates the output widget (not just clipboard).
+
+        Behaviour contract
+        ------------------
+        - pending == ''         → do nothing; stay armed (agent hasn't typed yet).
+        - pending not in SLA_MAP → output Txn Code only; no SMS hook; disarm.
+        - pending in SLA_MAP    → full output + SMS queue armed; disarm.
         """
         if not self._smart_listener_armed:
             return
         pending = getattr(self, '_sla_pending', '')
+
+        # ── Guard: no digits typed yet → stay armed, do nothing ──────────
+        if not pending:
+            return
 
         # Map accumulated digits → SLA text and label
         SLA_MAP = {
@@ -1655,13 +2326,16 @@ class AgentHelperUI:
             '72': ("Reversal initiated sub advised on SLA of 72hrs and educated on hakikisha.", "72hrs"),
         }
 
+        valid_sla = pending in SLA_MAP
         output = ""
         sla_label = "Txn Code Only"
 
-        if pending not in SLA_MAP:
-            # Graceful degrade: No explicitly typed valid SLA digit
+        if not valid_sla:
+            # Invalid digit sequence → output Txn Code only; no note, no default SLA
             output = self._detected_txn_id
-            self._set_status("Reversal output copied (Txn Code Only) — Ctrl+V to paste, then SMS auto-loads")
+            self._set_status(
+                f"Reversal: invalid SLA '{pending}' — output set to Txn Code only"
+            )
         else:
             sla_text, sla_label = SLA_MAP[pending]
 
@@ -1692,8 +2366,10 @@ class AgentHelperUI:
         self._sla_pending = ''
         self._disarm_sla_listener()
 
-        # Arm the Sequential Clipboard Queue: next Ctrl+V swaps clipboard to Hakikisha SMS
-        self._arm_paste_hook(sla_label)
+        # Arm Sequential Clipboard Queue ONLY when a valid SLA was matched
+        # (Txn Code Only path must not queue the Hakikisha SMS)
+        if valid_sla:
+            self._arm_paste_hook(sla_label)
 
     def _disarm_sla_listener(self):
         """Remove the SLA key listener."""
@@ -1707,118 +2383,54 @@ class AgentHelperUI:
     # ─── SEQUENTIAL CLIPBOARD QUEUE ──────────────────────────────
 
     def _arm_paste_hook(self, sla_label: str) -> None:
-        """
-        Register a temporary, self-destructing Ctrl+V global hotkey.
+        """Queue Hakikisha SMS for automatic clipboard loading (EDR-safe).
 
-        On the agent's next Ctrl+V, the hook fires _load_sms_to_clipboard which:
-          1. Immediately removes itself (self-destruct).
-          2. Waits 300 ms (off the mainloop) for the OS to finish pasting the
-             CRM note into the target window.
-          3. Loads the Hakikisha SMS into the clipboard.
-
-        A 60-second timeout auto-disarms the hook to prevent stale state or
-        unintended clipboard swaps later in the agent's shift.
-
-        Security note: the Ctrl+V hook is registered ONLY after a CRM note has
-        been copied and fires exactly once.  It does not log or inspect any
-        clipboard content.
+        Uses a timer-based approach instead of keyboard hooks.  After a
+        3-second delay (giving the agent time to paste the reversal output
+        into the CRM), the Hakikisha SMS is automatically copied to the
+        clipboard.
 
         Args:
-            sla_label: Human-readable SLA label used only in the status bar message.
+            sla_label: Human-readable SLA label for the status bar.
         """
-        if not kb:
-            return
-
-        # Disarm any previously lingering paste hook before arming a new one
+        # HLR hook must yield to Hakikisha
+        self._disarm_hlr_paste_hook()
+        # Disarm any previously lingering paste timer
         self._disarm_paste_hook()
 
-        try:
-            self._paste_hook = kb.add_hotkey(
-                'ctrl+v',
-                self._load_sms_to_clipboard,
-                suppress=False,
-            )
-        except Exception:
-            return
-
-        # 60-second timeout fallback: silently remove the hook if never triggered
+        self._hakikisha_pending = True
+        # 3-second delay: agent pastes reversal output -> hakikisha auto-loads
         self._paste_hook_timeout_id = self.root.after(
-            60_000, self._disarm_paste_hook
+            3000, self._load_sms_to_clipboard
         )
-        import logging as _log
-        _log.getLogger(__name__).debug(
-            "_arm_paste_hook: Ctrl+V hook armed (60s timeout active)."
+        self._set_status(
+            f"Reversal output copied ({sla_label}) \u2014 Hakikisha SMS auto-loads in 3s"
         )
 
     def _load_sms_to_clipboard(self) -> None:
-        """
-        Sequential Clipboard Queue callback — fires once on the agent's next Ctrl+V.
+        """Timer callback: load the Hakikisha SMS into the clipboard."""
+        self._hakikisha_pending = False
+        self._paste_hook_timeout_id = None
 
-        Execution sequence
-        ------------------
-        1. Self-destruct: remove this hotkey hook immediately.
-        2. Cancel the 60-second timeout (no longer needed).
-        3. Sleep 300 ms off the Tkinter mainloop to allow the OS to finish
-           pasting the CRM note into the target application.
-        4. Load the Hakikisha SMS snippet into the clipboard via pyperclip.
-        5. Update the status bar via root.after() (thread-safe).
+        hakikisha_text = ""
+        snippet = self.snippet_engine.get_by_code("REVERSAL_HAKIKISHA")
+        if snippet:
+            hakikisha_text = snippet.get("text", "")
 
-        Security: no clipboard content is ever read or logged here.
-        """
-        # ── Step 1: Self-destruct (CRITICAL — must be first) ──────────
-        self._disarm_paste_hook()
-
-        # ── Steps 2-4 run in a background thread to avoid blocking mainloop ──
-        def _background_swap() -> None:
-            # Step 2: brief delay — let the OS complete the paste operation
-            time.sleep(0.3)
-
-            # Step 3: resolve the Hakikisha snippet text
-            hakikisha_text = ""
-            snippet = self.snippet_engine.get_by_code("REVERSAL_HAKIKISHA")
-            if snippet:
-                hakikisha_text = snippet.get("text", "")
-
-            if not hakikisha_text:
-                # Fallback hard-coded Swahili SMS (matches snippets.json)
-                hakikisha_text = (
-                    "Jambo, sasa ni rahisi kuhakikisha kwamba pesa zako "
-                    "zinaenda kwa nambari sahihi na M-PESA. HAKIKISHA kwa "
-                    "kubonyeza 1 KUKAMILISHA au 2 KUSIMAMISHA kutuma pesa."
-                )
-
-            # Step 4: load SMS into clipboard (pyperclip is thread-safe)
-            try:
-                if pyperclip:
-                    pyperclip.copy(hakikisha_text)
-                else:
-                    # Tkinter clipboard must be called from the main thread;
-                    # schedule it safely
-                    self.root.after(0, lambda: self._copy(hakikisha_text))
-                    self.root.after(
-                        100,
-                        lambda: self._set_status("Hakikisha SMS loaded — Ctrl+V to send")
-                    )
-                    return
-            except Exception:
-                return
-
-            # Step 5: update status bar from main thread
-            self.root.after(
-                0,
-                lambda: self._set_status("Hakikisha SMS loaded — Ctrl+V to send to customer")
+        if not hakikisha_text:
+            hakikisha_text = (
+                "Jambo, sasa ni rahisi kuhakikisha kwamba pesa zako "
+                "zinaenda kwa nambari sahihi na M-PESA. HAKIKISHA kwa "
+                "kubonyeza 1 KUKAMILISHA au 2 KUSIMAMISHA kutuma pesa."
             )
 
-        threading.Thread(target=_background_swap, daemon=True).start()
+        self._copy(hakikisha_text)
+        self._last_clipboard = hakikisha_text
+        self._set_status("Hakikisha SMS loaded — Ctrl+V to send to customer")
 
     def _disarm_paste_hook(self) -> None:
-        """
-        Cleanly remove the temporary Ctrl+V hotkey hook and cancel the
-        60-second timeout timer.
-
-        Safe to call multiple times (idempotent).
-        """
-        # Cancel the 60-second fallback timer
+        """Cancel any pending Hakikisha timer.  Idempotent."""
+        self._hakikisha_pending = False
         if self._paste_hook_timeout_id is not None:
             try:
                 self.root.after_cancel(self._paste_hook_timeout_id)
@@ -1826,19 +2438,16 @@ class AgentHelperUI:
                 pass
             self._paste_hook_timeout_id = None
 
-        # Remove the keyboard hook
-        if kb and self._paste_hook is not None:
-            try:
-                kb.remove_hotkey(self._paste_hook)
-            except Exception:
-                pass
-            self._paste_hook = None
-
     # ─── SR SLA LISTENER ────────────────────────────────────
 
     def _check_sr_clipboard(self, text):
         """Check clipboard for an SR number matching the configured regex.
         If found (and not already armed for this SR), arm the SR SLA listener.
+
+        The listener waits indefinitely — no expiry timer is started here.
+        The 1500ms finalize timer is only started after the agent types the
+        first SLA digit (in _handle_sr_sla_digit), mirroring the reversal
+        smart listener design.
         """
         if not text:
             return
@@ -1854,10 +2463,11 @@ class AgentHelperUI:
                 self._sr_sla_pending = ''
                 self._set_status(f"SR detected: {sr} — type SLA hours (e.g. 24, 72, 168)")
                 self._arm_sr_sla_listener()
-                # Auto-disarm after 1500ms if no input arrives
+                # Cancel any stale finalize timer — do NOT schedule one here;
+                # finalize only triggers after the agent types SLA digits.
                 if self._sr_sla_timer_id:
                     self.root.after_cancel(self._sr_sla_timer_id)
-                self._sr_sla_timer_id = self.root.after(1500, self._expire_sr_sla)
+                    self._sr_sla_timer_id = None
 
     def _arm_sr_sla_listener(self):
         """Attach keyboard hook to capture SLA digits for SR note."""
@@ -1889,7 +2499,9 @@ class AgentHelperUI:
         self._sr_sla_timer_id = self.root.after(1500, self._finalize_sr_sla)
 
     def _finalize_sr_sla(self):
-        """Build and copy the SR interaction note using the configured template, then reset."""
+        """Build SR interaction note in the exact format:
+        '<SR> SR raised SLA <digits> hours', copy it, and reset.
+        """
         if not self._sr_listener_armed:
             return
         pending = self._sr_sla_pending.strip()
@@ -1898,13 +2510,13 @@ class AgentHelperUI:
             return
 
         sr = self._detected_sr
-        # Substitute [SR] and [SLA] placeholders in the user-configured template
-        note = self._sr_template.replace('[SR]', sr).replace('[SLA]', pending)
+        # Fixed format as required: "<SR> SR raised SLA <N> hours"
+        note = f"{sr} SR raised SLA {pending} hours"
 
         # Copy to clipboard
         self._copy(note)
 
-        # Also show in the output widget so the agent can see it
+        # Show in the output widget
         try:
             self.output_text.delete("1.0", tk.END)
             self.output_text.insert("1.0", note)
@@ -1942,56 +2554,175 @@ class AgentHelperUI:
     # ─── GUIDANCE EDITOR (Sprint 4) ──────────────────────────────
 
     def _save_user_guidance(self):
-        """Save current guidance text as user overrides to user_guidance.json."""
+        """Persist the current guidance list to user_guidance.json.
+
+        Only callable (Save button enabled) after at least one line has been
+        added via the Add button in this session — prevents accidental
+        duplicate saves from read-only views.
+        """
         if not self.current_raw_issue:
             self._set_status("No issue selected — nothing to save")
             return
-
-        issue_code = self.current_raw_issue.get('issue_code', '')
-        # Read the current content from the guidance text widget
-        content = self.guidance_text.get("1.0", tk.END).strip()
-        if not content:
-            self._set_status("Guidance is empty — nothing to save")
+        if not getattr(self, '_guidance_has_pending_adds', False):
+            self._set_status("Nothing to save — use ➕ Add or double-click a note to edit first")
             return
 
-        # Parse lines back to list (strip "– " prefix)
-        lines = []
-        for line in content.split('\n'):
-            line = line.strip()
-            if line.startswith('– '):
-                line = line[2:]
-            if line:
-                lines.append(line)
+        issue_code = self.current_raw_issue.get('issue_code', '')
+        lines = list(self._current_guidance)  # save exactly what's in memory
 
-        # Load existing user guidance
         user_guidance = self.data_loader.load_json('user_guidance.json')
         if not isinstance(user_guidance, dict):
             user_guidance = {}
         user_guidance[issue_code] = lines
         self.data_loader.save_json('user_guidance.json', user_guidance)
 
-        # Update in-memory guidance for this issue
-        self._current_guidance = lines
         self._user_guidance = user_guidance
-        self._set_status(f"Guidance saved for {issue_code} ({len(lines)} items)")
+        self._guidance_has_pending_adds = False
+        # Disable Save button again until next Add
+        try:
+            self._guide_save_btn.configure(state=tk.DISABLED)
+        except Exception:
+            pass
+        self._set_status(f"\u2713 Guidance saved for {issue_code} ({len(lines)} notes)")
 
     def _add_guidance_line(self):
-        """Add a new guidance line via a simple dialog."""
+        """Prompt for new guidance text, append it, enable Save, refresh widget."""
         if not self.current_raw_issue:
-            self._set_status("No issue selected")
+            self._set_status("Select an issue first")
             return
 
-        # Simple input dialog
         from tkinter import simpledialog
         new_line = simpledialog.askstring(
-            "Add Guidance",
-            "Enter new guidance text:",
+            "Add Guidance Note",
+            "Enter the new guidance note:",
             parent=self.root
         )
-        if new_line and new_line.strip():
-            self._current_guidance.append(new_line.strip())
-            self._filter_guidance()
-            self._set_status(f"Guidance line added (use Save to persist)")
+        if not new_line or not new_line.strip():
+            return
+        cleaned = new_line.strip()
+        if cleaned in self._current_guidance:
+            self._set_status("That note already exists — not added")
+            return
+        self._current_guidance.append(cleaned)
+        self._guidance_has_pending_adds = True
+        # Enable the Save button now that there's something new
+        try:
+            self._guide_save_btn.configure(state=tk.NORMAL)
+        except Exception:
+            pass
+        self._filter_guidance()  # refresh display (respects any active filter)
+        self._set_status(f"Note added — click 💾 Save to persist")
+
+    def _edit_guidance_line(self, idx: int, original_text: str) -> None:
+        """Open a pre-filled dialog to edit an existing guidance note in-place.
+
+        Called on <Double-Button-1> from a guidance tag in _filter_guidance.
+        On OK: replaces the note at *idx* in self._current_guidance, marks the
+        session dirty (enables 💾 Save), and refreshes the guidance widget.
+        On Cancel / no change: does nothing.
+
+        Args:
+            idx:           Index of the note in self._current_guidance.
+            original_text: Current text of the note (used to pre-fill the dialog).
+        """
+        from tkinter import simpledialog
+        edited = simpledialog.askstring(
+            "Edit Guidance Note",
+            "Edit the guidance note:",
+            initialvalue=original_text,
+            parent=self.root,
+        )
+        if edited is None:          # user cancelled
+            return
+        edited = edited.strip()
+        if not edited or edited == original_text:
+            return                  # nothing changed
+
+        # Update in-memory list (guard against stale idx from filtered view)
+        if 0 <= idx < len(self._current_guidance):
+            self._current_guidance[idx] = edited
+        else:
+            # idx is a position in the full list but the filter may have shifted it;
+            # fall back to replacing by original text value
+            try:
+                pos = self._current_guidance.index(original_text)
+                self._current_guidance[pos] = edited
+            except ValueError:
+                self._set_status("Could not locate note to edit — try again")
+                return
+
+        self._guidance_has_pending_adds = True
+        try:
+            self._guide_save_btn.configure(state=tk.NORMAL)
+        except Exception:
+            pass
+        self._filter_guidance(keyword=self._guidance_filter_var.get())
+        self._set_status(f"Note updated — click 💾 Save to persist")
+
+    # ── Inline filter helpers ─────────────────────────────────────
+
+    def _on_guidance_filter_typed(self, *_):
+        """Trace callback — fires on every keystroke in the filter entry.
+
+        The entry is always a plain, empty field (no placeholder text inside).
+        An empty string means 'show everything'; any text narrows the list.
+        """
+        if not hasattr(self, 'guidance_text'):
+            return  # widget not yet built
+        self._filter_guidance(keyword=self._guidance_filter_var.get())
+
+    def _on_guidance_click(self, event):
+        """Copy the full text of the clicked guidance line to the clipboard."""
+        widget = self.guidance_text
+        try:
+            # Identify which line was clicked
+            index = widget.index(f"@{event.x},{event.y}")
+            line_start = widget.index(f"{index} linestart")
+            line_end   = widget.index(f"{index} lineend")
+            line_text  = widget.get(line_start, line_end).strip()
+            # Strip the leading "– " bullet prefix
+            if line_text.startswith("\u2013 "):
+                line_text = line_text[2:]
+            if line_text:
+                self._increment_guidance(line_text)
+                self._log_action('CLICK_GUIDANCE', line_text[:30])
+                self._copy(line_text)
+                self._set_status(f"Copied guidance: {line_text[:70]}")
+        except Exception:
+            pass
+
+    def _increment_guidance(self, note_text: str) -> None:
+        """Increment the click-count for a guidance note and persist to history.json.
+
+        Used by _on_guidance_click to track which notes agents use most often.
+        The counts power the smart-sort in _filter_guidance so high-frequency
+        notes automatically rise to the top of the Guidance panel.
+
+        Args:
+            note_text: The raw guidance note string that was clicked.
+        """
+        usage = self._history.setdefault('guidance_usage', {})
+        usage[note_text] = usage.get(note_text, 0) + 1
+        self.data_loader.save_json('history.json', self._history)
+
+    def _log_action(self, action: str, details: str = "") -> None:
+        """Append one telemetry event to the in-progress session buffer.
+
+        Intentionally lightweight: a single list.append so it never blocks
+        the Tkinter mainloop.  The buffer is only flushed to disk inside
+        _on_copy_output, meaning only *completed* workflows are persisted.
+
+        Args:
+            action:  Short uppercase verb that identifies the event type
+                     (e.g. 'SEARCH', 'SELECT_ISSUE', 'PASTE_CRM').
+            details: Optional free-text payload, kept to ≤ 60 chars by
+                     callers to limit file-size growth.
+        """
+        self._current_session.append({
+            'time':    time.time(),
+            'action':  action,
+            'details': details,
+        })
 
     def _load_user_guidance(self, issue_code):
         """Load user-edited guidance overrides for an issue, if any."""
@@ -2013,6 +2744,92 @@ class AgentHelperUI:
 
     def _set_status(self, msg: str):
         self.status_var.set(msg)
+
+    def _apply_context_menu_recursive(self, widget):
+        """Walk a widget tree and attach the right-click menu to every Entry/Text."""
+        if isinstance(widget, (ttk.Entry, tk.Entry, tk.Text, scrolledtext.ScrolledText)):
+            self._make_context_menu(widget)
+        for child in widget.winfo_children():
+            self._apply_context_menu_recursive(child)
+
+    # ─── RIGHT-CLICK CONTEXT MENU ────────────────────────────────
+
+    def _make_context_menu(self, widget):
+        """Bind a right-click Cut / Copy / Paste context menu to *widget*.
+
+        Works for tk.Entry, ttk.Entry, tk.Text, and scrolledtext.ScrolledText.
+        The menu is created on-demand each time to ensure it always reflects
+        the widget's current state (e.g. selection, clipboard content).
+
+        Args:
+            widget: Any Tkinter text-input widget to attach the menu to.
+        """
+        def _show_menu(event):
+            menu = tk.Menu(self.root, tearoff=0)
+
+            # Determine which operations are valid right now
+            has_sel = False
+            try:
+                if isinstance(widget, (tk.Text, scrolledtext.ScrolledText)):
+                    has_sel = bool(widget.tag_ranges(tk.SEL))
+                else:
+                    has_sel = bool(widget.selection_present())
+            except Exception:
+                pass
+
+            has_clip = False
+            try:
+                clip = self.root.clipboard_get()
+                has_clip = bool(clip)
+            except Exception:
+                pass
+
+            is_readonly = False
+            try:
+                state = str(widget.cget('state'))
+                is_readonly = (state == tk.DISABLED)
+            except Exception:
+                pass
+
+            # Cut
+            menu.add_command(
+                label="Cut",
+                accelerator="Ctrl+X",
+                state=tk.NORMAL if (has_sel and not is_readonly) else tk.DISABLED,
+                command=lambda: widget.event_generate("<<Cut>>")
+            )
+            # Copy
+            menu.add_command(
+                label="Copy",
+                accelerator="Ctrl+C",
+                state=tk.NORMAL if has_sel else tk.DISABLED,
+                command=lambda: widget.event_generate("<<Copy>>")
+            )
+            # Paste
+            menu.add_command(
+                label="Paste",
+                accelerator="Ctrl+V",
+                state=tk.NORMAL if (has_clip and not is_readonly) else tk.DISABLED,
+                command=lambda: widget.event_generate("<<Paste>>")
+            )
+            menu.add_separator()
+            # Select All
+            menu.add_command(
+                label="Select All",
+                accelerator="Ctrl+A",
+                command=lambda: (
+                    widget.tag_add(tk.SEL, "1.0", tk.END)
+                    if isinstance(widget, (tk.Text, scrolledtext.ScrolledText))
+                    else widget.select_range(0, tk.END)
+                )
+            )
+
+            try:
+                menu.tk_popup(event.x_root, event.y_root)
+            finally:
+                menu.grab_release()
+
+        widget.bind("<Button-3>", _show_menu, add="+")
 
     # ─── CONTEXTUAL HELP — "ASK ME HOW" (Cheat Sheet) ───────────
 
@@ -2185,8 +3002,9 @@ class AgentHelperUI:
             except Exception:
                 pass
 
-        # Disarm Sequential Clipboard Queue paste hook
+        # Disarm Sequential Clipboard Queue hooks
         self._disarm_paste_hook()
+        self._disarm_hlr_paste_hook()
 
         # Unregister all remaining keyboard hooks
         if kb:
@@ -2237,6 +3055,20 @@ class AgentHelperUI:
 
 
 def main():
+    # ── High-DPI awareness (Windows only) ──────────────────────────────
+    # Must be called before tk.Tk() so the OS maps logical → physical
+    # pixels correctly, eliminating the blurry "480p" scaling artefact.
+    try:
+        import ctypes
+        # Windows 8.1+ (Per-Monitor DPI aware)
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        try:
+            # Windows Vista / 7 fallback
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass  # Non-Windows or older OS — no action needed
+
     root = tk.Tk()
     app = AgentHelperUI(root)
     root.mainloop()

@@ -1,4 +1,4 @@
-# Plug-and-Play CRM Adapter — Implementation Guide
+# Plug-and-Play CRM Adapter — Integration Guide
 
 ## What was built
 

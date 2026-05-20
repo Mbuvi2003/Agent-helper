@@ -80,5 +80,3 @@ try {
     Write-Host "GitHub release failed: $_"
     Write-Host "The zip was still built - you can release manually on github.com"
 }
-
-## Removed problematic Write-Host lines at end of script (caused unterminated string error)

@@ -222,21 +222,20 @@ def _validate_name(raw: str) -> str:
     Validate and clean a customer name string.
 
     Acceptance criteria:
-      - 2–4 space-separated words.
-      - Letters only.
+      - 2, 3, or 4 space-separated words.
+      - Each word must consist *only* of letters (A-Z / a-z).
+
+    No filler suffixes (e.g. "-NA") are ever appended; if the extracted
+    name is "John Doe" it is returned exactly as "John Doe".
     """
     if not raw:
         return ""
-    # Only allow letters and spaces
-    cleaned = re.sub(r"[^A-Za-z\s]", " ", raw).strip()
-    cleaned = re.sub(r"\s+", " ", cleaned)
-    
-    # Remove 'NA' or 'na' used as fillers
-    words = [w for w in cleaned.split() if w.upper() != 'NA']
-    
+    # Collapse runs of whitespace and strip surrounding whitespace
+    cleaned = re.sub(r"\s+", " ", raw.strip())
+    # Split on whitespace and keep only pure-letter words
+    words = [w for w in cleaned.split() if re.fullmatch(r"[A-Za-z]+", w)]
     if len(words) < 2 or len(words) > 4:
         return ""
-    
     return " ".join(words)
 
 
@@ -349,7 +348,6 @@ _INLINE_PATTERNS: List[Tuple[str, str]] = [
     ("Amount",              r"(?:amount|topup\s*amount)\s*:\s*([\d,.\s]+)"),
     ("MPESA",               r"(?:m-?pesa\s*bal(?:ance)?)\s*:\s*([\d,.\s]+)"),
     ("Airtime",             r"(?:airtime\s*bal(?:ance)?)\s*:\s*([\d,.\s]+)"),
-    ("Fuliza Limit",        r"(?:fuliza\s*(?:limit)?)\s*:\s*([\d,.\s]+)"),
 ]
 
 _SKIP_VALUES: frozenset = frozenset({"", "-", "N/A", "n/a", "nil", "none", "No Data", "no data"})

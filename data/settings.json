@@ -1,6 +1,6 @@
 {
   "app_name": "Agent Helper",
-  "version": "1.7.2",
+  "version": "1.7.5",
   "data_folder": "data",
   "fuzzy_threshold": 70,
   "use_rapidfuzz": true,

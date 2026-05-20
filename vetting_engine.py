@@ -516,12 +516,6 @@ class VettingEngine:
         }
         lines: List[str] = []
 
-        if issue_code == "SIM_SWAP":
-            if calling_no:
-                lines.append(f"Calling No: {calling_no}")
-            if target_no:
-                lines.append(f"Target No: {target_no}")
-
         if vetting_result == "pass":
             lines.extend(config["pass_header"])
             for output_label, key in output_fields:

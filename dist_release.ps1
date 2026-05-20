@@ -1,5 +1,5 @@
 $token = "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"
-$version = "1.7.2"
+$version = "1.7.4"
 
 Write-Host "Building EXE (onedir)..."
 pyinstaller -y --onedir --windowed --name AgentHelper --hidden-import keyboard --icon images\icon.ico --add-data "images\icon.ico;images" main.py

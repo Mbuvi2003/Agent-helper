@@ -1,148 +1,184 @@
-# Agent Helper - Call Center Support Desktop App
+# Agent Helper — Call Center Support Desktop App
 
-Fast, offline desktop app for call center agents. Instantly identify customer issues, extract vetting data, retrieve resolution workflows, and copy prepared responses.
+Fast, offline desktop tool for call center agents. Instantly classify customer issues, auto-extract vetting data, retrieve resolution workflows, and copy prepared interaction notes — all in one keyboard-driven interface.
 
 ## Features
 
-- **Issue Classification**: Instant keyword/fuzzy matching to identify customer problems
-- **Vetting Extraction**: Auto-parse customer data from pasted notes or manual forms
-- **Strict Data Typing**: Name validated as letters-only (2-4 words); ID/YOB/balances validated as numbers-only — rejects noisy CRM artifacts
-- **Resolution Engine**: Smart rule-based resolution options based on issue + vetting state
-- **Snippet Library**: One-click copy of pre-built response templates
-- **PRS/Skiza Intelligence**: PRS codes forced to 5+ digits (filters out false 4-digit matches); Skiza tune name auto-captured
-- **Sticky Calling Number**: Once detected, the calling number stays locked until you copy it or clear the session
-- **Mini-App Mode**: Phone-width window snapped to right edge with focus-based transparency
-- **Search**: Lightning-fast search on keywords, triggers, synonyms
-- **Offline**: No internet required; all data stored locally (JSON)
-- **Keyboard Hotkeys**: Faster workflow during live calls
+- **Issue Classification** — Instant keyword/fuzzy matching across 26 issue types
+- **Vetting Extraction** — Auto-parse customer data from pasted CRM notes
+- **Strict Data Typing** — Names: 2–4 all-letter words only (no `-NA` filler); ID/YOB/balances: digits only — rejects CRM noise
+- **Resolution Engine** — Rule-based resolution options driven by issue + vetting state
+- **Snippet Library** — One-click copy of 25+ pre-built response templates
+- **PRS/Skiza Intelligence** — PRS codes enforced at 5+ digits; Skiza tune names auto-captured
+- **Ring-Buffer Phone Numbers** — Calling/Target numbers cycle endlessly: 1st → Box 1, 2nd → Box 2, 3rd → Box 1 again…
+- **Smart Reversal Listener** — Copy a txn ID → type `2`, `12`, or `72` → full reversal note auto-copies to clipboard; fires only after digit input (no premature auto-finalize)
+- **SR SLA Listener** — Copy an SR number → type SLA hours → note auto-built as `<SR> SR raised SLA <N> hours`
+- **Sequential Clipboard Queue** — After reversal note copies, next Ctrl+V auto-loads the Hakikisha SMS
+- **Guidance Panel** — Per-issue guidance with inline filter (live-typing), Add (with duplicate check), and Save (enabled only after Add is used)
+- **Mini-App Mode** — Phone-width window snapped to the right edge of the screen
+- **Global Hotkey** — `Ctrl+Shift+Space` toggles app visibility from any window
+- **⚙️ Edit Issues** — Graphical in-app issue/resolution editor
+- **💡 Ask me how** — Floating SIM Swap cheat-sheet (available in both Main and Mini views)
+- **Search** — Lightning-fast fuzzy search across keywords, triggers, synonyms
+- **Offline** — No internet required; all data stored locally in JSON
+
+## Top Bar Layout
+
+```
+[Agent Helper v1.x.x] [🔍 _____________ ] [Clear All]     [⚙️ Edit] [💡 Ask me how] [▣ Mini]
+ ←————————————— LEFT (search zone) ————————————————→       ←————— RIGHT (button cluster) ——→
+```
+
+**Mini view** exposes the same buttons in Row 1:
+```
+[🔍 ____] [⚙️ Edit] [💡] [📌 Pin] [▣ Full] [Clear]
+```
 
 ## Deployment & Installation
 
 ### Official Production Release (MSIX & Microsoft Store)
-Agent Helper is packaged as a secure, sandboxed **MSIX bundle** distributed via the **Microsoft Store**. This is the official production deployment path to facilitate:
-- Clean, sandboxed installations without leaving registry debris.
-- Seamless, silent auto-updates.
-- Full compliance with enterprise centralized deployment tools (like MECM/Intune).
+Agent Helper is packaged as a secure, sandboxed **MSIX bundle** distributed via the **Microsoft Store**:
+- Clean, sandboxed installation — no registry debris
+- Seamless silent auto-updates
+- Full compliance with enterprise deployment tools (MECM / Intune)
 
 ### Developer / Local Testing
-If you are developing locally, you can run the application directly via Python:
 ```bash
 pip install -r requirements.txt
 python main.py
 ```
-*(Note: PyInstaller can be used to generate a standalone `.exe` for local testing, but MSIX is the official production standard).*
 
 ## Usage
 
-- **Type or paste** a customer issue in the search bar
-- **Click a category** on the left to filter issues
-- **Select an issue** from results to view details
-- **Paste customer notes** to extract vetting data automatically
-- **Copy snippets** to clipboard with one click
+1. **Type** a customer issue in the 🔍 search bar — results appear instantly in a dropdown
+2. **Click an issue** to load its guidance, vetting fields, and resolution options
+3. **Paste CRM notes** (📋 Paste CRM) to auto-extract vetting data
+4. **Copy snippets or interaction output** with one click
+5. Switch to **Mini mode** (▣ Mini) for a phone-width sidebar during calls
+
+## Global Shortcut
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+Shift+Space` | Toggle app visibility (show/hide from any window) |
+| `Ctrl+C` | Copy interaction output |
+| `Ctrl+V` *(armed)* | Load Hakikisha SMS to clipboard after reversal note |
+
+## Guidance Panel
+
+| Control | Behaviour |
+|---|---|
+| 🔍 filter box | Live-typing — filters notes instantly as you type; empty = show all |
+| ✕ | Clears the filter in one click |
+| ➕ Add | Prompts for a new note; rejects duplicates; enables 💾 Save |
+| 💾 Save | Persists the current list to `user_guidance.json`; only enabled after ➕ Add is used |
+| Click a note | Copies the note text to clipboard immediately |
 
 ## Data Structure
 
-All data is stored in `data/` folder as JSON:
+All data lives in `data/` (JSON, human-editable):
 
-- `issues.json` - Issue definitions with keywords, synonyms, required fields
-- `snippets.json` - Quick response templates with triggers
-- `resolutions.json` - Resolution rules and outcomes
-- `settings.json` - App configuration
-- `history.json` - Search history and recent copies
-- `favorites.json` - User-saved favorites
-
-## Customize Data
-
-Edit JSON files directly to add:
-- New issue categories
-- Custom snippets and triggers
-- Resolution rules
-
-Changes are automatically loaded on app restart.
+| File | Contents |
+|---|---|
+| `issues.json` | 26 issue definitions with keywords, synonyms, vetting requirements |
+| `snippets.json` | 25 quick-response templates with triggers |
+| `resolutions.json` | 39 resolution rules and outcomes |
+| `settings.json` | App configuration and version |
+| `history.json` | Search history |
+| `favorites.json` | User-saved favorites |
+| `user_guidance.json` | Per-issue guidance overrides (editable via ➕ Add / 💾 Save) |
 
 ## Architecture
 
-- `issue_engine.py` - Issue classification
-- `vetting_engine.py` - Data extraction & validation
-- `resolution_engine.py` - Resolution logic & rules
-- `snippet_engine.py` - Snippet search & management
-- `text_utils.py` - Search, fuzzy matching, text normalization
-- `data_loader.py` - JSON persistence
-- `ui.py` - Tkinter interface
-- `main.py` - Entry point
+| Module | Purpose |
+|---|---|
+| `main.py` | Entry point |
+| `ui.py` | Tkinter GUI — Main & Mini views |
+| `issue_engine.py` | Issue classification |
+| `vetting_engine.py` | Data extraction & validation |
+| `resolution_engine.py` | Resolution rules & output generation |
+| `snippet_engine.py` | Snippet search & management |
+| `text_utils.py` | Fuzzy matching, normalization, name/numeric validation |
+| `data_loader.py` | JSON persistence (writable user dir + bundled defaults) |
+| `crm_adapter.py` | Plug-and-play live CRM API adapter (clipboard fallback if unconfigured) |
+| `editor_ui.py` | Graphical issue/resolution editor |
 
 ## Example Workflows
 
-### SIM Swap:
-1. Type `sim swap` or `swap vetting`
-2. Paste customer note → auto-extracts name, ID, YOB
-3. See vetting status (COMPLETE/INCOMPLETE)
-4. View resolution options (based on vetting status)
-5. Copy final response to agent tools
+### SIM Swap
+1. Type `sim swap` → select issue
+2. Paste customer note → name, ID, YOB auto-extracted
+3. See vetting status (COMPLETE / INCOMPLETE)
+4. Copy interaction output
 
-### M-PESA Reversal:
-1. Type `reversal 72hrs`
-2. App suggests "Reversal - 72 Hour SLA"
-3. View SLA details and Hakikisha education snippet
-4. Copy response → `/reversal_72h` trigger auto-fills
+### M-PESA Reversal (Smart Listener)
+1. Copy the transaction ID from CRM → app detects it automatically
+2. Type `72` (or `12` or `2`) for the SLA
+3. Full reversal note + SLA text copies to clipboard after 1.5s of silence
+4. Press Ctrl+V again → Hakikisha SMS auto-loads
 
-### Quick Snippet:
-1. Type `/simswap_failed`
-2. See pre-built response
-3. Copy to clipboard instantly
+### SR Escalation (SR Listener)
+1. Copy an SR number matching the configured pattern
+2. Type the SLA hours (e.g. `48`)
+3. App builds: `SR12345 SR raised SLA 48 hours` — auto-copied
 
-## Tips
-
-- Use **Paste** button to auto-extract customer data from unstructured notes
-- **Category buttons** are faster than searching when you know the domain
-- **Hotkeys** (when enabled): Ctrl+1 for /simswap, Ctrl+2 for /reversal, etc.
-- **Fuzzy matching** tolerates typos: "pin rset" → "pin reset"
-- **Favorites** save your most-used snippets for instant access
-- **Calling number** auto-locks on first detection — copy it to unlock for the next caller
-- **Mini mode** (▫ Mini button) snaps to the right side and fades when you switch to CRM
-- **Switching issues** auto-clears stale data — no more ghost fields from the last call
+### Quick Snippet
+1. Type `/simswap_failed` in the search bar
+2. Pre-built response appears
+3. Click to copy instantly
 
 ## Changelog
 
-### v1.7.2 — Sprint 7: Production Hardening
-- **Strict Extraction Whitelisting**: Excluded 7 sensitive fields (e.g., M-Shwari Limit, 2FDNs) from auto-extraction to enforce manual entry. Enforced stricter name and numeric casting rules to reject CRM noise and fillers like "-NA".
-- **SLA Graceful Degradation**: Removed the hardcoded 2-hour SLA default. If no SLA is selected within 3 seconds, the listener safely defaults to outputting the raw Transaction Code while preserving the Hakikisha SMS queue.
-- **Inline Guidance Editor**: Upgraded the Guidance panel to a `ScrolledText` widget, allowing direct inline typing of custom instructions which seamlessly persist to `user_guidance.json`.
-- **MSIX Packaging & Validation**: Sanitized workspace artifacts, validated secrets, and compiled production MSIX bundle.
+### v1.8.1 — Sprint 8: Enterprise Security & Brand UI
+- **EDR Compliance** — Completely removed `keyboard` library dependencies. Global hotkeys and clipboard monitoring now use native Win32 `RegisterHotKey` and Tkinter polling to bypass locked-down corporate IT/EDR security software.
+- **HLR Manual Button** — Replaced the complex HLR auto-timer with a simple, speed-independent "HLR" button next to the target number box that instantly copies the 6-digit suffix.
+- **Safaricom Branding** — Full UI overhaul featuring Safaricom brand colors (Primary Green, Danger Red, Secondary Light Green) with modern, flat, padded button designs.
+- **Vetting Layout** — Reverted vetting fields to the classic single-column vertical list for optimal workflow familiarity.
 
-### v1.7.1 — Privacy Policy Update
-- **Privacy Policy**: Added an official Privacy and Data Handling Policy to clarify the app's offline-first architecture and compliance guidelines.
+### v1.8.0 — Sprint 8: UX Polish & Logic Fixes
+
+- **Name extraction fixed** — `_validate_name()` now strictly requires 2–4 all-letter words with no `-NA` filler logic. "John Doe" returns exactly "John Doe".
+- **Ring-buffer phone numbers** — Replaced the locked-flag system with an infinite ring buffer: 3rd number replaces Box 1, 4th replaces Box 2, and so on endlessly.
+- **SR interaction note format** — Fixed output to the exact spec: `<SR> SR raised SLA <N> hours` (template-based approach removed).
+- **Smart Reversal Listener hardened** — Removed the 3s auto-finalize timer that caused premature "Txn Code Only" output. Listener now waits indefinitely until the agent types SLA digits, then finalises after 1.5s of silence. All digit keys accepted (not just `1`, `2`, `7`).
+- **Global hotkey** — Changed from `Alt+Space` (OS menu conflict) to **`Ctrl+Shift+Space`**.
+- **Guidance panel overhaul**:
+  - Inline live-filter search box (no popup) — 🔍 icon outside, empty Entry, ✕ clear button
+  - Layout: Filter (50%) | ➕ Add (25%) | 💾 Save (25%) in both Main and Mini views
+  - Save disabled until ➕ Add is used; duplicate notes rejected automatically
+  - Click any guidance line → copies it to clipboard
+- **Top bar redesign**:
+  - Strict LEFT / RIGHT zone layout using `button_cluster_frame`
+  - Renamed: `"✏️ Editor"` → `"⚙️ Edit"`, Pin button now labelled `"📌 Pin"`
+  - Button order: `[⚙️ Edit]` → `[💡 Ask me how]` → `[▣ Mini]`
+  - **💡 Ask me how** now present in Mini view (was missing before)
+  - Consistent `relief="flat"`, `cursor="hand2"` across all header buttons
+
+### v1.7.4 — Sprint 7: Production Hardening
+- Strict extraction whitelisting; excluded sensitive fields from auto-extraction
+- SLA graceful degradation (no hardcoded 2hr default)
+- Inline guidance `ScrolledText` editor; persisted to `user_guidance.json`
+- MSIX bundle compiled and workspace sanitized
 
 ### v1.7.0 — Sprint 6: Issue Editor & Streamlined UI
-- **Issue Editor**: Added an intuitive graphical editor to manage issues, categories, and vetting requirements directly within the app.
-- **Search Dropdown**: Replaced static listboxes with a clean, floating dropdown for search results.
-- **Reversal Streamlining**: Completely removed "SR raised" legacy text from Reversal 72hr SLA output.
+- Graphical in-app issue/resolution editor (`editor_ui.py`)
+- Floating search-result dropdown replaces static listboxes
+- Reversal 72hr SLA output cleaned up
 
-### v1.4.0 — Sprint 3+4: New Issues, Automation & Guidance Editor
-- **Line Unsuspension**: New issue type with full vetting (Pass/Fail Secondary/Fail Primary/Failed Twice)
-- **SIM Swap serial suppression**: Serial No excluded from Fail Secondary and Failed Twice output
-- **Apps cleared**: Shortened SUSPENDING_LINE footer from "Mpesa APP, Safaricom APP profile cleared." to "Apps cleared."
-- **Smart Reversal Listener**: Copy a transaction ID → press 2/12/72 → reversal output auto-copied to clipboard
-- **Global Hotkey Architecture**: Migrated from OS-bound Windows key hooks to a clean Alt + Space listener to ensure zero conflict with OS-level Group Policies (GPOs) and Action Center bindings in corporate environments.
-- **Guidance Editor**: Save (💾) and Add (+) buttons on the guidance panel — saves to `user_guidance.json`
+### v1.4.0 — Sprint 3+4: Automation & Guidance
+- Line Unsuspension issue with full vetting model
+- Smart Reversal Listener (txn ID → SLA keypress → auto-copy)
+- Global hotkey architecture (keyboard library)
+- Guidance Editor with Save/Add buttons
 
 ### v1.3.0 — Sprint 2: Advanced Vetting Engine
-- **Strict typing**: Name must be 2-4 words (letters only); ID/YOB/balances numbers-only
-- **PRS 5-digit enforcement**: 4-digit codes are no longer incorrectly captured for PRS
-- **Skiza tune name capture**: Extracted automatically from CRM paste
-- **Sticky calling number**: Locks on first detection, unlocked by Copy or Clear All
-- **Ghost-clearing**: Switching issues clears all stale output/field data
-- **Reversal redesign**: Step 2 box hidden; Pending Authorized added as checkbox
-- **Mini-App**: Right-side snap + focus-based transparency
-- **Auto-scroll**: Copy Output scrolls canvas back to top
-
-## Planned Enhancements
-- Expanded Skiza tune database
-- Agent performance metrics
+- Strict name/numeric typing; PRS 5-digit enforcement
+- Skiza tune name auto-capture
+- Sticky calling number (lock on detection)
+- Mini-App right-snap mode
 
 ## Privacy Policy
-See the [Privacy and Data Handling Policy](PRIVACY_POLICY.md) for details on how this app operates securely offline.
+See [PRIVACY_POLICY.md](PRIVACY_POLICY.md) for full details on offline-first data handling.
 
 ## License
-
-Internal tool.
+Internal tool — not for redistribution.

@@ -1,6 +1,7 @@
 [Setup]
+AppId={{BDE12185-E68F-44F4-BA15-0F0611481CA8}
 AppName=Agent Helper
-AppVersion=1.7.2
+AppVersion=1.7.4
 AppPublisher=Mbuvi2003
 DefaultDirName={localappdata}\Programs\Agent Helper
 DefaultGroupName=Agent Helper

@@ -51,7 +51,6 @@ $manifestContent = @"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities">
 
-  <!-- NOTE: Update Name and Publisher based on your Partner Center identity -->
   <Identity
     Name="YouGeni.AgentHelper"
     ProcessorArchitecture="x64"

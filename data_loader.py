@@ -51,14 +51,36 @@ def _get_bundled_data_dir() -> Path:
     """
     Return the read-only bundled data directory.
 
-    - PyInstaller frozen build  : <exe_dir>\\data
-    - Dev environment           : <project_root>\\data
+    - PyInstaller --onefile  : sys._MEIPASS/data  (temp extraction dir)
+    - PyInstaller --onedir   : <exe_dir>/data
+    - Dev environment        : <project_root>/data
     """
     if getattr(sys, "frozen", False):
-        base = Path(sys.executable).parent
+        # _MEIPASS is set by onefile builds; fall back to exe dir for onedir
+        base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
     else:
         base = Path(__file__).parent
     return base / "data"
+
+
+def _seed_writable_dir(writable_dir: Path, bundled_dir: Path) -> None:
+    """
+    First-run seeding: copy any bundled data file that does not yet
+    exist in the writable directory.  This ensures the app works
+    identically to the Store version on a clean machine.
+    """
+    import shutil
+    if not bundled_dir.exists():
+        return
+    for src in bundled_dir.iterdir():
+        if src.is_file():
+            dst = writable_dir / src.name
+            if not dst.exists():
+                try:
+                    shutil.copy2(src, dst)
+                    _log.info("DataLoader: seeded '%s' to writable dir.", src.name)
+                except OSError as exc:
+                    _log.warning("DataLoader: could not seed '%s' — %s", src.name, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -77,10 +99,23 @@ class DataLoader:
       - Seamless first-run experience (bundled defaults are auto-seeded).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, base_path: str = None) -> None:
         """Resolve and initialise both data directory paths."""
         self._writable_dir: Path = _get_writable_data_dir()
-        self._bundled_dir: Path = _get_bundled_data_dir()
+
+        if base_path:
+            if getattr(sys, "frozen", False):
+                meipass = getattr(sys, "_MEIPASS", None)
+                base = Path(meipass) if meipass else Path(sys.executable).parent
+                self._bundled_dir = base / base_path
+            else:
+                self._bundled_dir = Path(base_path).resolve()
+        else:
+            self._bundled_dir: Path = _get_bundled_data_dir()
+
+        # Seed writable dir from bundled defaults on first run
+        _seed_writable_dir(self._writable_dir, self._bundled_dir)
+
         _log.info(
             "DataLoader initialised. Writable: %s | Bundled: %s",
             self._writable_dir,
