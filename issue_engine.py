@@ -86,7 +86,7 @@ class IssueEngine:
         }
 
     def get_top_matches(
-        self, query: str, limit: int = 3, threshold: int = 70
+        self, query: str, limit: int = 3, threshold: int = 70, frequencies: Optional[Dict[str, int]] = None
     ) -> List[Dict]:
         """
         Return the top *limit* matching issues for *query*.
@@ -104,7 +104,7 @@ class IssueEngine:
         if not query or not query.strip():
             return []
 
-        results = search_issues(query, self.issues, threshold)
+        results = search_issues(query, self.issues, threshold, frequencies)
         return [
             {
                 "issue_code":    issue.get("issue_code"),

@@ -88,6 +88,7 @@ def search_issues(
     query: str,
     issues: List[Dict],
     threshold: int = 70,
+    frequencies: Optional[Dict[str, int]] = None,
 ) -> List[Tuple[Dict, int, str]]:
     """
     Rank *issues* against *query* using keyword, synonym, and fuzzy matching.
@@ -146,6 +147,10 @@ def search_issues(
                 match_reason = "name"
 
         if max_score >= threshold:
+            if frequencies:
+                freq = frequencies.get(issue.get("issue_code"), 0)
+                if freq > 0:
+                    max_score = min(100, max_score + min(freq * 2, 15))
             results.append((issue, max_score, match_reason))
 
     results.sort(key=lambda x: x[1], reverse=True)

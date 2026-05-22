@@ -523,6 +523,16 @@ class AgentHelperUI:
         _lbl_calling.bind("<Button-1>", lambda e: self._copy_number(self.calling_no_var.get()))
         _lbl_calling.bind("<Double-Button-1>", lambda e: self._copy_hlr_suffix(self.calling_no_var.get()))
 
+        # HLR button — copies last 6 digits of target number
+        self._hlr_btn = tk.Button(
+            self._calling_numbers_frame, text="HLR",
+            font=("Segoe UI", 8, "bold"), fg="#FFFFFF", bg=self._c['teal'],
+            activebackground='#004D40', activeforeground='#FFFFFF',
+            relief="flat", cursor="hand2", bd=0, padx=6, pady=1,
+            command=lambda: self._copy_hlr_suffix(self.target_no_var.get()),
+        )
+        self._hlr_btn.pack(side=tk.LEFT, padx=(4, 4))
+
         icon2 = tk.Label(self._calling_numbers_frame, text="\u260E",
                          fg="green", cursor="hand2", bg=_bg)
         icon2.pack(side=tk.LEFT)
@@ -533,16 +543,6 @@ class AgentHelperUI:
         _lbl_target.pack(side=tk.LEFT, padx=2)
         _lbl_target.bind("<Button-1>", lambda e: self._copy_number(self.target_no_var.get()))
         _lbl_target.bind("<Double-Button-1>", lambda e: self._copy_hlr_suffix(self.target_no_var.get()))
-
-        # HLR button — copies last 6 digits of target number
-        self._hlr_btn = tk.Button(
-            self._calling_numbers_frame, text="HLR",
-            font=("Segoe UI", 8, "bold"), fg="#FFFFFF", bg=self._c['teal'],
-            activebackground='#004D40', activeforeground='#FFFFFF',
-            relief="flat", cursor="hand2", bd=0, padx=6, pady=1,
-            command=lambda: self._copy_hlr_suffix(self.target_no_var.get()),
-        )
-        self._hlr_btn.pack(side=tk.LEFT, padx=(4, 0))
 
 
 
@@ -851,17 +851,6 @@ class AgentHelperUI:
         _c_lbl_calling.bind("<Button-1>", lambda e: self._copy_number(self.calling_no_var.get()))
         _c_lbl_calling.bind("<Double-Button-1>", lambda e: self._copy_hlr_suffix(self.calling_no_var.get()))
 
-        c_icon2 = ttk.Label(self._compact_calling_frame, text="\u260E", foreground="green", cursor="hand2")
-        c_icon2.pack(side=tk.LEFT, padx=(4, 0))
-        c_icon2.bind("<Button-1>", lambda e: self._copy_number(self.target_no_var.get()))
-        c_icon2.bind("<Double-Button-1>", lambda e: self._copy_hlr_suffix(self.target_no_var.get()))
-
-        _c_lbl_target = ttk.Label(self._compact_calling_frame, textvariable=self.target_no_var,
-                  font=("Consolas", 9), foreground="blue", cursor="hand2")
-        _c_lbl_target.pack(side=tk.LEFT, padx=1)
-        _c_lbl_target.bind("<Button-1>", lambda e: self._copy_number(self.target_no_var.get()))
-        _c_lbl_target.bind("<Double-Button-1>", lambda e: self._copy_hlr_suffix(self.target_no_var.get()))
-
         # HLR button (compact)
         self._hlr_btn_compact = tk.Button(
             self._compact_calling_frame, text="HLR",
@@ -870,7 +859,18 @@ class AgentHelperUI:
             relief="flat", cursor="hand2", bd=0, padx=4, pady=0,
             command=lambda: self._copy_hlr_suffix(self.target_no_var.get()),
         )
-        self._hlr_btn_compact.pack(side=tk.LEFT, padx=(3, 0))
+        self._hlr_btn_compact.pack(side=tk.LEFT, padx=(3, 3))
+
+        c_icon2 = ttk.Label(self._compact_calling_frame, text="\u260E", foreground="green", cursor="hand2")
+        c_icon2.pack(side=tk.LEFT, padx=(0, 0))
+        c_icon2.bind("<Button-1>", lambda e: self._copy_number(self.target_no_var.get()))
+        c_icon2.bind("<Double-Button-1>", lambda e: self._copy_hlr_suffix(self.target_no_var.get()))
+
+        _c_lbl_target = ttk.Label(self._compact_calling_frame, textvariable=self.target_no_var,
+                  font=("Consolas", 9), foreground="blue", cursor="hand2")
+        _c_lbl_target.pack(side=tk.LEFT, padx=1)
+        _c_lbl_target.bind("<Button-1>", lambda e: self._copy_number(self.target_no_var.get()))
+        _c_lbl_target.bind("<Double-Button-1>", lambda e: self._copy_hlr_suffix(self.target_no_var.get()))
 
         # ── Row 4: Guidance (compact) ──
         guide_lf = ttk.LabelFrame(cf, text="Guidance")
@@ -1095,7 +1095,8 @@ class AgentHelperUI:
         self.root.deiconify()
         self.root.attributes('-topmost', True)
         self.root.focus_force()
-        self.root.after(100, lambda: self.root.attributes('-topmost', False))
+        pinned = getattr(self, '_pinned', False)
+        self.root.after(100, lambda: self.root.attributes('-topmost', pinned))
         # If serial auto-copy is armed, fire it now (mouse-paste workflow)
         if getattr(self, '_serial_auto_copy_armed', False):
             self._serial_auto_copy_armed = False
@@ -1161,6 +1162,10 @@ class AgentHelperUI:
             recent.remove(issue_code)
         recent.insert(0, issue_code)
         self._history['recent_issues'] = recent[:10]
+        
+        # Track frequencies for search popularity boosting
+        freqs = self._history.setdefault('issue_frequencies', {})
+        freqs[issue_code] = freqs.get(issue_code, 0) + 1
 
     def _toggle_favorite(self):
         """Toggle current issue as a favorite."""
@@ -1211,7 +1216,8 @@ class AgentHelperUI:
 
     def _do_search(self, query):
         self._log_action('SEARCH', query[:60])
-        self.search_results = self.issue_engine.get_top_matches(query, limit=8)
+        freqs = self._history.get('issue_frequencies', {})
+        self.search_results = self.issue_engine.get_top_matches(query, limit=8, frequencies=freqs)
         self.root.after(0, self._update_results)
 
     def _on_category(self, category):
@@ -1331,6 +1337,9 @@ class AgentHelperUI:
         # Reset telemetry session for the new resolution cycle
         self._current_session = []
         self._log_action('SELECT_ISSUE', self.current_raw_issue.get('issue_code', ''))
+
+        # Clear search bar upon successful selection
+        self.search_var.set("")
 
         # Soft-reset: clear stale output/fields from the previous issue
         self._reset_for_new_issue()
@@ -1558,7 +1567,22 @@ class AgentHelperUI:
         serial_frame = ttk.Frame(self.fields_frame)
         serial_frame.pack(fill=tk.X, padx=4, pady=2)
         ttk.Label(serial_frame, text="Serial No (manual):").pack(side=tk.LEFT, padx=2)
-        ttk.Entry(serial_frame, textvariable=self.serial_var, width=25).pack(side=tk.LEFT, padx=4)
+        ttk.Button(serial_frame, text="📋", width=3, command=self._on_copy_serial).pack(side=tk.LEFT, padx=(0, 2))
+        serial_entry = ttk.Entry(serial_frame, textvariable=self.serial_var, width=25)
+        serial_entry.pack(side=tk.LEFT, padx=4)
+        self.style.configure('SerialRed.TEntry', fieldbackground='white', foreground='red')
+        self.style.configure('SerialGreen.TEntry', fieldbackground='white', foreground='green')
+        def _update_generic_serial(*_):
+            n = len(self.serial_var.get())
+            try:
+                if n == 20:
+                    serial_entry.configure(style="SerialGreen.TEntry")
+                else:
+                    serial_entry.configure(style="SerialRed.TEntry")
+            except tk.TclError:
+                pass
+        self.serial_var.trace_add('write', _update_generic_serial)
+        _update_generic_serial()
         ttk.Button(serial_frame, text="Add Serial & Refresh",
                    command=self._on_add_serial).pack(side=tk.LEFT, padx=4)
 
@@ -1630,7 +1654,11 @@ class AgentHelperUI:
                 var.set('89254021')
                 serial_frame = ttk.Frame(inner)
                 serial_frame.grid(row=row, column=1, sticky=tk.W, padx=2, pady=1)
-                ttk.Entry(serial_frame, textvariable=var, width=25).pack(side=tk.LEFT)
+                ttk.Button(serial_frame, text="📋", width=3, command=self._on_copy_serial).pack(side=tk.LEFT, padx=(0, 2))
+                serial_entry = ttk.Entry(serial_frame, textvariable=var, width=25)
+                serial_entry.pack(side=tk.LEFT)
+                self.style.configure('SerialRed.TEntry', fieldbackground='white', foreground='red')
+                self.style.configure('SerialGreen.TEntry', fieldbackground='white', foreground='green')
                 self._serial_counter_var = tk.StringVar(value="8/20")
                 counter_lbl = ttk.Label(serial_frame, textvariable=self._serial_counter_var,
                                         font=("Arial", 8))
@@ -1641,10 +1669,10 @@ class AgentHelperUI:
                     try:
                         if n == 20:
                             counter_lbl.configure(foreground="green")
-                        elif n > 20:
-                            counter_lbl.configure(foreground="red")
+                            serial_entry.configure(style="SerialGreen.TEntry")
                         else:
-                            counter_lbl.configure(foreground="gray")
+                            counter_lbl.configure(foreground="red")
+                            serial_entry.configure(style="SerialRed.TEntry")
                     except tk.TclError:
                         pass
                 var.trace_add('write', _update_serial_counter)
@@ -2088,7 +2116,49 @@ class AgentHelperUI:
             self._check_txn_id_clipboard(text)
             # SR SLA Listener: check for SR number
             self._check_sr_clipboard(text)
+            
+            # Smart Clipboard Monitoring: Detect CRM layout
+            extracted = self.vetting_engine.extract_from_text(text)
+            found_count = sum(1 for v in extracted.values() if v)
+            if found_count >= 2:
+                self._last_crm_text = text
+                self._do_extract(text.strip())
+                self._show_toast(f"CRM Data Detected & Loaded ({found_count} fields)")
+
         self.root.after(500, self._poll_clipboard)
+
+    def _show_toast(self, message, duration=3000):
+        """Display a non-intrusive toast notification."""
+        toast = tk.Toplevel(self.root)
+        toast.overrideredirect(True)
+        toast.attributes('-topmost', True)
+        
+        bg_color = "#323232"
+        fg_color = "#FFFFFF"
+        toast.configure(bg=bg_color)
+        
+        lbl = tk.Label(toast, text=message, bg=bg_color, fg=fg_color, font=("Segoe UI", 10), padx=15, pady=8)
+        lbl.pack()
+        
+        toast.update_idletasks()
+        
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        x = screen_w - toast.winfo_width() - 20
+        y = screen_h - toast.winfo_height() - 60
+        
+        toast.geometry(f"+{x}+{y}")
+        toast.attributes('-alpha', 0.9)
+        
+        def fade_out(alpha=0.9):
+            alpha -= 0.1
+            if alpha > 0:
+                toast.attributes('-alpha', alpha)
+                toast.after(50, fade_out, alpha)
+            else:
+                toast.destroy()
+                
+        toast.after(duration, fade_out)
 
     # ─── HLR SMART LISTENER ──────────────────────────────────────
 
@@ -2386,7 +2456,7 @@ class AgentHelperUI:
         """Queue Hakikisha SMS for automatic clipboard loading (EDR-safe).
 
         Uses a timer-based approach instead of keyboard hooks.  After a
-        3-second delay (giving the agent time to paste the reversal output
+        5-second delay (giving the agent time to paste the reversal output
         into the CRM), the Hakikisha SMS is automatically copied to the
         clipboard.
 
@@ -2399,12 +2469,12 @@ class AgentHelperUI:
         self._disarm_paste_hook()
 
         self._hakikisha_pending = True
-        # 3-second delay: agent pastes reversal output -> hakikisha auto-loads
+        # 5-second delay: agent pastes reversal output -> hakikisha auto-loads
         self._paste_hook_timeout_id = self.root.after(
-            3000, self._load_sms_to_clipboard
+            5000, self._load_sms_to_clipboard
         )
         self._set_status(
-            f"Reversal output copied ({sla_label}) \u2014 Hakikisha SMS auto-loads in 3s"
+            f"Reversal output copied ({sla_label}) \u2014 Hakikisha SMS auto-loads in 5s"
         )
 
     def _load_sms_to_clipboard(self) -> None:
