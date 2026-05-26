@@ -12,6 +12,7 @@ Fast, offline desktop tool for call center agents. Instantly classify customer i
 - **PRS/Skiza Intelligence** — PRS codes enforced at 5+ digits; Skiza tune names auto-captured
 - **Ring-Buffer Phone Numbers** — Calling/Target numbers cycle endlessly: 1st → Box 1, 2nd → Box 2, 3rd → Box 1 again…
 - **Smart Reversal Listener** — Copy a txn ID → type `2`, `12`, or `72` → full reversal note auto-copies to clipboard; fires only after digit input (no premature auto-finalize)
+- **Mutually Exclusive Listeners** — Reversal and SR listeners automatically disarm each other to prevent conflicting output
 - **SR SLA Listener** — Copy an SR number → type SLA hours → note auto-built as `<SR> SR raised SLA <N> hours`
 - **Sequential Clipboard Queue** — After reversal note copies, next Ctrl+V auto-loads the Hakikisha SMS
 - **Guidance Panel** — Per-issue guidance with inline filter (live-typing), Add (with duplicate check), and Save (enabled only after Add is used)
@@ -25,7 +26,7 @@ Fast, offline desktop tool for call center agents. Instantly classify customer i
 ## Top Bar Layout
 
 ```
-[Agent Helper v1.x.x] [🔍 _____________ ] [Clear All]     [⚙️ Edit] [💡 Ask me how] [▣ Mini]
+[Agent Helper v1.9.0] [🔍 _____________ ] [Clear All]     [⚙️ Edit] [💡 Ask me how] [▣ Mini]
  ←————————————— LEFT (search zone) ————————————————→       ←————— RIGHT (button cluster) ——→
 ```
 
@@ -72,7 +73,7 @@ python main.py
 | ✕ | Clears the filter in one click |
 | ➕ Add | Prompts for a new note; rejects duplicates; enables 💾 Save |
 | 💾 Save | Persists the current list to `user_guidance.json`; only enabled after ➕ Add is used |
-| Click a note | Copies the note text to clipboard immediately |
+| Click a note | Copies the **full** note text to clipboard (including multi-line paragraphs) |
 
 ## Data Structure
 
@@ -99,7 +100,7 @@ All data lives in `data/` (JSON, human-editable):
 | `resolution_engine.py` | Resolution rules & output generation |
 | `snippet_engine.py` | Snippet search & management |
 | `text_utils.py` | Fuzzy matching, normalization, name/numeric validation |
-| `data_loader.py` | JSON persistence (writable user dir + bundled defaults) |
+| `data_loader.py` | JSON persistence (writable user dir + bundled defaults + auto-merge on update) |
 | `crm_adapter.py` | Plug-and-play live CRM API adapter (clipboard fallback if unconfigured) |
 | `editor_ui.py` | Graphical issue/resolution editor |
 
@@ -128,6 +129,13 @@ All data lives in `data/` (JSON, human-editable):
 3. Click to copy instantly
 
 ## Changelog
+
+### v1.9.0 — Sprint 9: Stability, Data Sync & Bug Fixes
+- **Data Auto-Sync on Update** — `data_loader.py` now auto-merges missing issue codes from the bundled database into the user's local `issues.json` on every load. Ensures app updates never leave users with a broken/outdated issue catalogue while preserving any custom edits.
+- **Missing Issue Error Popup** — `_select_issue_by_code` now shows a clear error dialog instead of silently doing nothing when an issue code is missing from the local database.
+- **Listener Mutual Exclusion** — Reversal and SR SLA listeners are now mutually exclusive. Arming one fully disarms the other (including pending timers and Hakikisha SMS queue), eliminating race conditions that produced merged/wrong output.
+- **Guidance Full-Paragraph Copy** — Clicking a multi-line guidance note now copies the entire paragraph, not just the single visual line under the cursor. Uses tag-based lookup instead of `linestart`/`lineend`.
+- **CRM Hard Reset on New Paste** — `_do_extract` now performs a full wipe of all previous extracted fields, serial number, SDP codes, and entry widgets before parsing new CRM text. Prevents stale data from a previous customer leaking into the next extraction.
 
 ### v1.8.1 — Sprint 8: Enterprise Security & Brand UI
 - **EDR Compliance** — Completely removed `keyboard` library dependencies. Global hotkeys and clipboard monitoring now use native Win32 `RegisterHotKey` and Tkinter polling to bypass locked-down corporate IT/EDR security software.

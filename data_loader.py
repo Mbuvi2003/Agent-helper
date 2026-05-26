@@ -132,7 +132,7 @@ class DataLoader:
 
         Checks the writable directory first; falls back to the bundled
         read-only directory if the file does not yet exist in the writable
-        location.
+        location. Auto-merges missing essential data if loading issues.json.
 
         Args:
             filename: File name, e.g. ``"issues.json"``.
@@ -145,7 +145,30 @@ class DataLoader:
             if filepath.exists():
                 try:
                     with open(filepath, "r", encoding="utf-8") as fh:
-                        return json.load(fh)
+                        data = json.load(fh)
+                        
+                        # Migration: auto-merge missing issues from bundled file
+                        if filename == "issues.json" and directory == self._writable_dir:
+                            bundled_path = self._bundled_dir / filename
+                            if bundled_path.exists():
+                                try:
+                                    with open(bundled_path, "r", encoding="utf-8") as b_fh:
+                                        bundled_data = json.load(b_fh)
+                                        local_issues = data.get("issues", [])
+                                        bundled_issues = bundled_data.get("issues", [])
+                                        local_codes = {i.get("issue_code") for i in local_issues if i.get("issue_code")}
+                                        missing = [i for i in bundled_issues if i.get("issue_code") not in local_codes]
+                                        if missing:
+                                            local_issues.extend(missing)
+                                            data["issues"] = local_issues
+                                            _log.info("DataLoader: Auto-merged %d missing issues from bundled database.", len(missing))
+                                            # Write back the merged data to the writable directory
+                                            with open(filepath, "w", encoding="utf-8") as w_fh:
+                                                json.dump(data, w_fh, indent=2, ensure_ascii=False)
+                                except Exception as exc:
+                                    _log.error("DataLoader: Failed to merge bundled issues — %s", exc)
+                                    
+                        return data
                 except (json.JSONDecodeError, IOError) as exc:
                     _log.error(
                         "DataLoader: failed to parse '%s' from %s — %s",

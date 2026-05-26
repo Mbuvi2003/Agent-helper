@@ -102,10 +102,7 @@ class AgentHelperUI:
         self._skiza_tune_name = ''  # captured Skiza tune name from CRM paste
         self._smart_listener_armed = False  # True when txn ID detected, waiting for SLA key
         self._detected_txn_id = ''  # transaction ID captured by smart listener
-        self._hotkey_hook = None   # keyboard.add_hotkey handle for Alt+Space
         self._user_guidance = {}  # user-editable guidance overrides
-        self._guidance_dropdown_win = None  # waterfall guidance dropdown Toplevel
-        self._guide_inner = None  # bullet-list inner frame (set in _build_ui)
         # SR SLA listener state
         self._detected_sr = ''          # SR number detected from clipboard
         self._sr_listener_armed = False  # True while waiting for SLA digits
@@ -620,7 +617,7 @@ class AgentHelperUI:
         self._current_guidance = []
         self._user_guidance = {}
         self._guidance_has_pending_adds = False  # tracks unsaved additions
-        self._guidance_dropdown_win = None
+
 
         # --- CENTRE: CRM paste + extracted fields ---
         self._centre_panel = ttk.Frame(body)
@@ -1143,10 +1140,7 @@ class AgentHelperUI:
 
     # ─── FAVORITES / RECENT ──────────────────────────────────────
 
-    def _refresh_fav_recent(self):
-        """No-op: favorites are still tracked in memory/disk but there is no
-        listbox to populate (removed in Sprint 5 UI cleanup)."""
-        pass
+
 
     def _find_issue_by_code(self, code):
         """Find raw issue dict by issue_code."""
@@ -1185,6 +1179,13 @@ class AgentHelperUI:
         """Programmatically select an issue by its code."""
         issue_raw = self._find_issue_by_code(code)
         if not issue_raw:
+            from tkinter import messagebox
+            messagebox.showerror(
+                "Issue Not Found", 
+                f"The issue code '{code}' was not found in your local database.\n\n"
+                "This usually happens if you've updated the app but still have an old issues.json file in your AppData folder.\n\n"
+                "Please go to Edit -> Reset to Defaults, or manually delete your old data file."
+            )
             return
         self.current_issue = {
             'issue_code': issue_raw['issue_code'],
@@ -1795,25 +1796,24 @@ class AgentHelperUI:
         self._log_action('PASTE_CRM')
         self._do_extract(text.strip())
 
-    def _on_paste_crm(self):
-        """Legacy: used by Ctrl+V shortcut."""
-        try:
-            text = self.root.clipboard_get()
-        except tk.TclError:
-            if pyperclip:
-                text = pyperclip.paste()
-            else:
-                return
-        self._last_crm_text = text
 
-    def _on_extract(self):
-        """Legacy: used by Ctrl+V shortcut."""
-        raw = getattr(self, '_last_crm_text', '').strip()
-        if not raw:
-            return
-        self._do_extract(raw)
 
     def _do_extract(self, raw):
+        # ── Hard reset: clear ALL previous extraction state before parsing ──
+        # Prevents stale fields from a previous customer leaking into the
+        # new extraction when the new CRM data is missing some fields.
+        self.extracted_fields = {}
+        self.extracted_codes = []
+        self._skiza_tune_name = ''
+        self.serial_var.set('')
+        # Clear all field entry StringVars so no old values linger
+        for var in self.field_entries.values():
+            try:
+                var.set('')
+            except Exception:
+                pass
+
+        # Now extract fresh data from the new CRM text
         self.extracted_fields = self.vetting_engine.extract_from_text(raw)
 
         # Determine current issue code for context-aware extraction
@@ -2305,15 +2305,7 @@ class AgentHelperUI:
         else:
             self.fields_frame.pack_forget()
 
-    def _on_compact_focus_in(self, event=None):
-        """Restore full opacity when the compact window gains focus."""
-        if self._compact_mode and getattr(self, '_transparency_focus_active', False):
-            self.root.attributes('-alpha', 1.0)
 
-    def _on_compact_focus_out(self, event=None):
-        """Fade to 75% opacity when the compact window loses focus."""
-        if self._compact_mode and getattr(self, '_transparency_focus_active', False):
-            self.root.attributes('-alpha', 0.75)
 
     # ─── SMART REVERSAL LISTENER (Sprint 4) ──────────────────────
 
@@ -2329,6 +2321,10 @@ class AgentHelperUI:
             txn = text.upper()
             if txn != self._detected_txn_id:
                 self._detected_txn_id = txn
+                # ── Mutual exclusion: disarm SR listener before arming reversal ──
+                if self._sr_listener_armed:
+                    self._reset_sr_sla_state()
+                    _log.info("Reversal listener: disarmed conflicting SR listener.")
                 self._smart_listener_armed = True
                 self._sla_pending = ''
                 self._reversal_txn_code = txn
@@ -2529,6 +2525,17 @@ class AgentHelperUI:
             sr = text.strip().upper()
             if sr != self._detected_sr:
                 self._detected_sr = sr
+                # ── Mutual exclusion: disarm Reversal listener before arming SR ──
+                if self._smart_listener_armed:
+                    self._smart_listener_armed = False
+                    self._detected_txn_id = ''
+                    self._sla_pending = ''
+                    self._disarm_sla_listener()
+                    self._disarm_paste_hook()  # cancel any pending Hakikisha SMS timer
+                    if hasattr(self, '_sla_timer_id') and self._sla_timer_id:
+                        self.root.after_cancel(self._sla_timer_id)
+                        self._sla_timer_id = None
+                    _log.info("SR listener: disarmed conflicting Reversal listener.")
                 self._sr_listener_armed = True
                 self._sr_sla_pending = ''
                 self._set_status(f"SR detected: {sr} — type SLA hours (e.g. 24, 72, 168)")
@@ -2596,11 +2603,7 @@ class AgentHelperUI:
         self._set_status(f"✓ SR note copied — {sr}, SLA {pending}h")
         self._reset_sr_sla_state()
 
-    def _expire_sr_sla(self):
-        """Called when the 1500ms grace period expires with no digit input."""
-        if self._sr_listener_armed and not self._sr_sla_pending:
-            self._reset_sr_sla_state()
-            self._set_status(f"SR listener expired (no SLA typed)")
+
 
     def _reset_sr_sla_state(self):
         """Fully disarm and clear all SR SLA listener state."""
@@ -2742,22 +2745,67 @@ class AgentHelperUI:
         self._filter_guidance(keyword=self._guidance_filter_var.get())
 
     def _on_guidance_click(self, event):
-        """Copy the full text of the clicked guidance line to the clipboard."""
+        """Copy the full text of the clicked guidance note to the clipboard.
+
+        Multi-line paragraphs are stored as a single entry in
+        ``self._current_guidance``.  The tag-based lookup ensures the
+        entire paragraph is copied regardless of which visual line the
+        mouse is hovering over.
+        """
         widget = self.guidance_text
         try:
-            # Identify which line was clicked
+            # Find the position the user clicked
             index = widget.index(f"@{event.x},{event.y}")
-            line_start = widget.index(f"{index} linestart")
-            line_end   = widget.index(f"{index} lineend")
-            line_text  = widget.get(line_start, line_end).strip()
-            # Strip the leading "– " bullet prefix
-            if line_text.startswith("\u2013 "):
-                line_text = line_text[2:]
-            if line_text:
-                self._increment_guidance(line_text)
-                self._log_action('CLICK_GUIDANCE', line_text[:30])
-                self._copy(line_text)
-                self._set_status(f"Copied guidance: {line_text[:70]}")
+            # Look up which _guide_line_ tag covers that position
+            tags = widget.tag_names(index)
+            guide_tag = None
+            for tag in tags:
+                if tag.startswith("_guide_line_"):
+                    guide_tag = tag
+                    break
+
+            if guide_tag is not None:
+                # Extract the original index into _current_guidance
+                try:
+                    guide_idx = int(guide_tag.split("_guide_line_")[1])
+                except (ValueError, IndexError):
+                    guide_idx = -1
+
+                # Retrieve the full original text (possibly multi-line)
+                usage = self._history.get('guidance_usage', {})
+                sorted_lines = sorted(self._current_guidance,
+                                      key=lambda x: usage.get(x, 0),
+                                      reverse=True)
+                if 0 <= guide_idx < len(sorted_lines):
+                    full_text = sorted_lines[guide_idx]
+                else:
+                    # Fallback: read from the tag range in the widget
+                    tag_ranges = widget.tag_ranges(guide_tag)
+                    if len(tag_ranges) >= 2:
+                        full_text = widget.get(tag_ranges[0], tag_ranges[1]).strip()
+                        # Strip the leading "– " bullet prefix
+                        if full_text.startswith("\u2013 "):
+                            full_text = full_text[2:]
+                    else:
+                        return
+
+                if full_text:
+                    self._increment_guidance(full_text)
+                    self._log_action('CLICK_GUIDANCE', full_text[:30])
+                    self._copy(full_text)
+                    self._set_status(f"Copied guidance: {full_text[:70]}")
+            else:
+                # No tag found — fallback to single-line copy
+                line_start = widget.index(f"{index} linestart")
+                line_end   = widget.index(f"{index} lineend")
+                line_text  = widget.get(line_start, line_end).strip()
+                if line_text.startswith("\u2013 "):
+                    line_text = line_text[2:]
+                if line_text:
+                    self._increment_guidance(line_text)
+                    self._log_action('CLICK_GUIDANCE', line_text[:30])
+                    self._copy(line_text)
+                    self._set_status(f"Copied guidance: {line_text[:70]}")
         except Exception:
             pass
 
@@ -3066,11 +3114,7 @@ class AgentHelperUI:
     def _on_close(self):
         """Save state and close the application."""
         # Remove global hotkey hook
-        if kb and self._hotkey_hook:
-            try:
-                kb.remove_hotkey(self._hotkey_hook)
-            except Exception:
-                pass
+
 
         # Disarm Sequential Clipboard Queue hooks
         self._disarm_paste_hook()

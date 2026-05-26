@@ -73,7 +73,7 @@ Agent_helper/
 #### Top Bar — strict LEFT / RIGHT layout
 ```
 LEFT cluster                                         RIGHT button_cluster_frame
-[Agent Helper v1.x] [🔍 search entry] [Clear All]   [⚙️ Edit] [💡 Ask me how] [▣ Mini]
+[Agent Helper v1.9.0] [🔍 search entry] [Clear All]   [⚙️ Edit] [💡 Ask me how] [▣ Mini]
 ```
 - All right-side buttons: `relief="flat"`, `cursor="hand2"`, consistent font/padding
 - Mini view Row 1: `[🔍 entry]` LEFT | `[⚙️ Edit][💡][📌 Pin][▣ Full][Clear]` RIGHT
@@ -85,7 +85,7 @@ LEFT cluster                                         RIGHT button_cluster_frame
 | 🔍 filter Entry | Live-typing filter (no popup); icon label outside the box; ✕ clears instantly |
 | ➕ Add | Dialog prompt; rejects duplicates; enables 💾 Save |
 | 💾 Save | Persists to `user_guidance.json`; disabled until ➕ Add used; resets after save |
-| Click a note | Copies raw note text to clipboard |
+| Click a note | Copies **full** raw note text to clipboard (including multi-line paragraphs) |
 
 #### Phone Number Ring Buffer
 - Replaces the old locked-flag system
@@ -95,6 +95,7 @@ LEFT cluster                                         RIGHT button_cluster_frame
 
 #### Smart Reversal Listener
 - Triggers when a txn ID (8–12 alphanumeric with at least one letter) is copied
+- **Mutually exclusive** with SR listener — arming one fully disarms the other (including pending timers and Hakikisha SMS queue)
 - Listener waits **indefinitely** — no premature 3s auto-finalize
 - Agent types SLA digits (`2`, `12`, or `72`); after 1.5s silence → finalize
 - Builds: `<txn_id>\n<SLA note text>` → copies to clipboard
@@ -102,6 +103,7 @@ LEFT cluster                                         RIGHT button_cluster_frame
 
 #### SR SLA Listener
 - Triggers when an SR number matching `_sr_regex` is copied
+- **Mutually exclusive** with Reversal listener — arming one fully disarms the other
 - Agent types SLA hours; after 1.5s silence → finalize
 - Output format (fixed): `<SR> SR raised SLA <N> hours`
 
@@ -122,6 +124,12 @@ LEFT cluster                                         RIGHT button_cluster_frame
 - Reads from bundled `data/` directory (source / MSIX bundle)
 - Writes to `%LOCALAPPDATA%\AgentHelper\data\` (writable user directory)
 - Seeds missing files from bundled defaults on first run
+- **Auto-merges** missing issue codes from the bundled `issues.json` into the user's local copy on every load — ensures app updates always deliver new issue types without destroying user edits
+
+### 9. CRM Extraction (`ui.py` — `_do_extract`)
+- **Hard reset** on every new CRM paste: clears all `extracted_fields`, `field_entries`, `serial_var`, `extracted_codes`, and `_skiza_tune_name` before parsing
+- Only fields actually found in the new CRM text are populated — no stale data from a previous customer can leak through
+- Only `Name`, `ID`, `YOB`, `MPESA`, and `Airtime` are extracted; Serial No and Fuliza are excluded from auto-extraction
 
 ---
 
@@ -161,6 +169,11 @@ LEFT cluster                                         RIGHT button_cluster_frame
 | Consistent button styling (flat, hand2, uniform padding) | 8 |
 | CRM Adapter (plug-and-play, clipboard fallback) | 6 |
 | DataLoader writable user directory | 7 |
+| DataLoader auto-merge missing issues on update | 9 |
+| Missing issue error popup (replaces silent failure) | 9 |
+| Listener mutual exclusion (Reversal ↔ SR) | 9 |
+| Guidance full-paragraph copy (tag-based click) | 9 |
+| CRM hard reset on new paste (no stale data leaks) | 9 |
 
 ---
 
